@@ -214,17 +214,21 @@
         return;
       }
     
+      const idToName = id => {
+        if (!id) return '';
+        // if it's already an array of linked records, take the first one
+        const actualId = Array.isArray(id) ? id[0] : id;
+        return playerMap[actualId] || actualId;
+      };
+    
       data.records.forEach(r => {
         const f = r.fields;
         const dateStr = f.ts ? new Date(f.ts).toLocaleDateString() : '';
     
-        // Convert IDs to names
-        const teamA = [f.teamA1, f.teamA2]
-          .map(id => playerMap[id] || id)
+        const teamA = [idToName(f.teamA1), idToName(f.teamA2)]
           .filter(Boolean)
           .join(', ');
-        const teamB = [f.teamB1, f.teamB2]
-          .map(id => playerMap[id] || id)
+        const teamB = [idToName(f.teamB1), idToName(f.teamB2)]
           .filter(Boolean)
           .join(', ');
     
@@ -347,8 +351,13 @@ async function updatePlayerStats(playerIds, result, pts) {
 
 
     // ===== INITIAL LOAD =====
-    loadPlayers();
-    loadMatches();
+    // ===== INITIAL LOAD =====
+    async function init() {
+      await loadPlayers();  // builds playerMap first
+      await loadMatches();  // then loads match history
+    }
+    init();
+
   </script>
 </body>
 </html>
