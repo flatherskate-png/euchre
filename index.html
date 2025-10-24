@@ -194,68 +194,72 @@
     }
 
     // ===== LOAD MATCHES =====
-    async function loadMatches() {
-      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=date&sort[0][direction]=desc`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
-      const data = await res.json();
-      const tbody = document.getElementById('matches-body');
-      tbody.innerHTML = '';
+   async function loadMatches() {
+  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
+  const data = await res.json();
+  const tbody = document.getElementById('matches-body');
+  tbody.innerHTML = '';
 
-      if (!data.records || data.records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No matches yet.</td></tr>';
-        return;
-      }
+  if (!data.records || data.records.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No matches yet.</td></tr>';
+    return;
+  }
 
-      data.records.forEach(r => {
-        const f = r.fields;
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${f.date || ''}</td>
-          <td>${f.teamA1 || ''}, ${f.teamA2 || ''}</td>
-          <td>${f.teamB1 || ''}, ${f.teamB2 || ''}</td>
-          <td>${f.winner || ''}</td>
-          <td>${f.points ?? 0}</td>
-        `;
-        tbody.appendChild(row);
-      });
-    }
+  data.records.forEach(r => {
+    const f = r.fields;
+    const row = document.createElement('tr');
+    const dateStr = f.ts ? new Date(f.ts).toLocaleDateString() : '';
+    row.innerHTML = `
+      <td>${dateStr}</td>
+      <td>${f.teamA1 || ''}, ${f.teamA2 || ''}</td>
+      <td>${f.teamB1 || ''}, ${f.teamB2 || ''}</td>
+      <td>${f.winner || ''}</td>
+      <td>${f.winPts ?? 0}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
 
     // ===== ADD MATCH =====
     async function addMatch() {
-      const a1 = teamA1.value, a2 = teamA2.value, b1 = teamB1.value, b2 = teamB2.value;
-      const winner = document.getElementById('winner').value;
-      const points = Number(document.getElementById('points').value) || 1;
-      if (!a1 || !a2 || !b1 || !b2 || !winner) {
-        alert('Please select all players and a winner.');
-        return;
-      }
+  const a1 = teamA1.value, a2 = teamA2.value, b1 = teamB1.value, b2 = teamB2.value;
+  const winner = document.getElementById('winner').value;
+  const points = Number(document.getElementById('points').value) || 1;
+  if (!a1 || !a2 || !b1 || !b2 || !winner) {
+    alert('Please select all players and a winner.');
+    return;
+  }
 
-      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`;
-      const body = {
-        fields: {
-          date: new Date().toISOString().split('T')[0],
-          teamA1: a1,
-          teamA2: a2,
-          teamB1: b1,
-          teamB2: b2,
-          winner,
-          points
-        }
-      };
-
-      await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-      });
-
-      await loadMatches();
-      document.getElementById('winner').value = '';
-      document.getElementById('points').value = 1;
+  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`;
+  const body = {
+    fields: {
+      ts: new Date().toISOString(), // timestamp
+      teamA1: a1,
+      teamA2: a2,
+      teamB1: b1,
+      teamB2: b2,
+      winner,
+      bonus: 0,
+      winPts: points
     }
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  const data = await res.json();
+  console.log('Match added:', data);
+  await loadMatches();
+  document.getElementById('winner').value = '';
+  document.getElementById('points').value = 1;
+}
 
     // ===== INITIAL LOAD =====
     loadPlayers();
