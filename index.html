@@ -136,6 +136,7 @@
 
     // ===== LOAD PLAYERS =====
     async function loadPlayers() {
+      let playerMap = {}; // recordId → name
       const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}?sort[0][field]=points&sort[0][direction]=desc`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
       const data = await res.json();
@@ -158,6 +159,11 @@
           <td>${f.points ?? 0}</td>
         `;
         tbody.appendChild(row);
+      });
+      // Build a quick lookup map for later use
+      playerMap = {};
+      data.records.forEach(r => {
+        playerMap[r.id] = r.fields.name;
       });
 
       // Fill dropdowns
@@ -196,32 +202,44 @@
     }
 
     // ===== LOAD MATCHES =====
-async function loadMatches() {
-  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
-  const data = await res.json();
-  const tbody = document.getElementById('matches-body');
-  tbody.innerHTML = '';
+    async function loadMatches() {
+      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
+      const data = await res.json();
+      const tbody = document.getElementById('matches-body');
+      tbody.innerHTML = '';
+    
+      if (!data.records || data.records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No matches yet.</td></tr>';
+        return;
+      }
+    
+      data.records.forEach(r => {
+        const f = r.fields;
+        const dateStr = f.ts ? new Date(f.ts).toLocaleDateString() : '';
+    
+        // Convert IDs to names
+        const teamA = [f.teamA1, f.teamA2]
+          .map(id => playerMap[id] || id)
+          .filter(Boolean)
+          .join(', ');
+        const teamB = [f.teamB1, f.teamB2]
+          .map(id => playerMap[id] || id)
+          .filter(Boolean)
+          .join(', ');
+    
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${dateStr}</td>
+          <td>${teamA}</td>
+          <td>${teamB}</td>
+          <td>${f.winner || ''}</td>
+          <td>${f.winPts ?? 0}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
 
-  if (!data.records || data.records.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No matches yet.</td></tr>';
-    return;
-  }
-
-  data.records.forEach(r => {
-    const f = r.fields;
-    const row = document.createElement('tr');
-    const dateStr = f.ts ? new Date(f.ts).toLocaleDateString() : '';
-    row.innerHTML = `
-      <td>${dateStr}</td>
-      <td>${f.teamA1 || ''}, ${f.teamA2 || ''}</td>
-      <td>${f.teamB1 || ''}, ${f.teamB2 || ''}</td>
-      <td>${f.winner || ''}</td>
-      <td>${f.winPts ?? 0}</td>
-    `;
-    tbody.appendChild(row);
-  });
-}
 
     // ===== ADD MATCH =====
     async function addMatch() {
