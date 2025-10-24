@@ -134,6 +134,68 @@
     const PLAYERS_TABLE  = 'players';           // lowercase table
     const MATCHES_TABLE  = 'matches';           // lowercase table
     window.playerMap = {};  // global map of recordId → player name
+    // --- tiny helpers used here too
+    const extractId = (val) => {
+      if (!val) return '';
+      if (Array.isArray(val)) {
+        const first = val[0];
+        if (!first) return '';
+        if (typeof first === 'object') return first.id || '';
+        return String(first);
+      }
+      if (typeof val === 'object') return val.id || '';
+      return String(val);
+    };
+
+    async function fetchAll(table) {
+      // simple single-page fetch (enough for small clubs). For big bases you can paginate.
+      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` } });
+      return res.json();
+    }
+
+    // ===== I THINK THIS IS A RECALCUTION OF OVERALL =====
+    async function recalcFromMatches() {
+      // 1) fetch players -> seed 0 totals map by recordId
+      const players = await fetchAll(PLAYERS_TABLE);
+      const totals = {};
+      (players.records || []).forEach(p => {
+        totals[p.id] = { wins: 0, losses: 0, points: 0, name: p.fields.name || p.fields.Name || '' };
+      });
+    
+      // 2) fetch matches -> accumulate
+      const matches = await fetchAll(MATCHES_TABLE);
+      (matches.records || []).forEach(m => {
+        const f = m.fields || {};
+        const a1 = extractId(f.teamA1), a2 = extractId(f.teamA2);
+        const b1 = extractId(f.teamB1), b2 = extractId(f.teamB2);
+        const winPts = Number(f.winPts ?? 0);
+        const w = (f.winner || '').toUpperCase();
+    
+        const winners = w === 'A' ? [a1, a2] : w === 'B' ? [b1, b2] : [];
+        const losers  = w === 'A' ? [b1, b2] : w === 'B' ? [a1, a2] : [];
+    
+        winners.forEach(id => { if (totals[id]) { totals[id].wins += 1; totals[id].points += winPts; } });
+        losers.forEach(id  => { if (totals[id]) { totals[id].losses += 1; } });
+      });
+    
+      // 3) PATCH back exact totals (id endpoint, no arrays)
+      for (const [id, t] of Object.entries(totals)) {
+        await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}/${id}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ fields: { wins: t.wins, losses: t.losses, points: t.points } })
+        });
+      }
+    
+      // 4) refresh UI
+      await loadPlayers();
+      await loadMatches();
+      alert('Standings recalculated from Match History ✅');
+    }
 
 
     // ===== LOAD PLAYERS =====
@@ -323,14 +385,9 @@ async function loadMatches() {
         const matchData = await matchRes.json();
         console.log('Match added:', matchData);
       
-        // STEP 2: Update player stats directly by ID
-        const winners = winner === 'A' ? [a1, a2] : [b1, b2];
-        const losers  = winner === 'A' ? [b1, b2] : [a1, a2];
-      
-        await updatePlayerStats(winners, 'win', points);
-        await updatePlayerStats(losers, 'loss', 0);
-      
-        await loadPlayers();
+        // STEP 2: Refresh everything via recalculation instead of manual increments
+        await recalcFromMatches();
+
         await loadMatches();
         document.getElementById('winner').value = '';
         document.getElementById('points').value = 1;
