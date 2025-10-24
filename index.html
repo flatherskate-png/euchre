@@ -210,6 +210,7 @@
       const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
       const data = await res.json();
+    
       const tbody = document.getElementById('matches-body');
       tbody.innerHTML = '';
     
@@ -218,42 +219,45 @@
         return;
       }
     
-      // Helper function to normalize names
-      const idToName = (val) => {
-        if (!val) return '';
-        // linked record arrays
-        if (Array.isArray(val)) {
-          const first = val[0];
+      // helper: prefer lookup field; otherwise resolve linked IDs via playerMap
+      const pickName = (f, linkKey, lookupKey) => {
+        // 1) try the lookup column, e.g. "name (from teamA1)"
+        const lk = f[lookupKey];
+        if (Array.isArray(lk) && lk.length) return String(lk[0]);
+    
+        // 2) use the linked record value and map via playerMap
+        const v = f[linkKey];
+        if (!v) return '';
+        if (Array.isArray(v)) {
+          const first = v[0];
           if (!first) return '';
-          // If Airtable expanded linked records (object form)
           if (typeof first === 'object') {
+            // expanded object {id, name}
             if (first.name) return first.name;
             if (first.id && playerMap[first.id]) return playerMap[first.id];
             return first.id || '';
           }
-          // Array of IDs
-          return playerMap[first] || first;
+          // array of IDs
+          return playerMap[first] || String(first);
         }
-        // Single string ID
-        return playerMap[val] || val;
+        // single string ID
+        return playerMap[v] || String(v);
       };
     
       data.records.forEach(r => {
         const f = r.fields;
         const dateStr = f.ts ? new Date(f.ts).toLocaleDateString() : '';
     
-        const teamA = [idToName(f.teamA1), idToName(f.teamA2)]
-          .filter(Boolean)
-          .join(', ');
-        const teamB = [idToName(f.teamB1), idToName(f.teamB2)]
-          .filter(Boolean)
-          .join(', ');
+        const a1 = pickName(f, 'teamA1', 'name (from teamA1)');
+        const a2 = pickName(f, 'teamA2', 'name (from teamA2)');
+        const b1 = pickName(f, 'teamB1', 'name (from teamB1)');
+        const b2 = pickName(f, 'teamB2', 'name (from teamB2)');
     
         const row = document.createElement('tr');
         row.innerHTML = `
           <td>${dateStr}</td>
-          <td>${teamA}</td>
-          <td>${teamB}</td>
+          <td>${[a1, a2].filter(Boolean).join(', ')}</td>
+          <td>${[b1, b2].filter(Boolean).join(', ')}</td>
           <td>${f.winner || ''}</td>
           <td>${f.winPts ?? 0}</td>
         `;
