@@ -161,17 +161,19 @@
       });
 
       // Fill dropdowns
+      // Fill dropdowns with player name + ID
       const selects = [teamA1, teamA2, teamB1, teamB2];
       selects.forEach(sel => {
         sel.innerHTML = '<option value="">--Select--</option>';
         data.records.forEach(r => {
           const f = r.fields;
           const opt = document.createElement('option');
-          opt.value = f.name;
-          opt.textContent = f.name;
+          opt.value = r.id;        // store the record ID
+          opt.textContent = f.name; // show name to user
           sel.appendChild(opt);
         });
       });
+
     }
 
     // ===== ADD PLAYER =====
@@ -223,79 +225,77 @@ async function loadMatches() {
 
     // ===== ADD MATCH =====
     async function addMatch() {
-  const a1 = teamA1.value, a2 = teamA2.value, b1 = teamB1.value, b2 = teamB2.value;
-  const winner = document.getElementById('winner').value;
-  const points = Number(document.getElementById('points').value) || 1;
-  if (!a1 || !a2 || !b1 || !b2 || !winner) {
-    alert('Please select all players and a winner.');
-    return;
-  }
-
-  // STEP 1: Add match to Airtable
-  const matchUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`;
-  const matchBody = {
-    fields: {
-      ts: new Date().toISOString(),
-      teamA1: a1,
-      teamA2: a2,
-      teamB1: b1,
-      teamB2: b2,
-      winner,
-      bonus: 0,
-      winPts: points
-    }
-  };
-
-  const matchRes = await fetch(matchUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(matchBody)
-  });
-  const matchData = await matchRes.json();
-  console.log('Match added:', matchData);
-
-  // STEP 2: Determine winners and losers
-  const winners = winner === 'A' ? [a1, a2] : [b1, b2];
-  const losers  = winner === 'A' ? [b1, b2] : [a1, a2];
-
-  // STEP 3: Update players in Airtable
-  await updatePlayerStats(winners, 'win', points);
-  await updatePlayerStats(losers, 'loss', 0);
-
-  // STEP 4: Refresh UI
-  await loadPlayers();
-  await loadMatches();
-  document.getElementById('winner').value = '';
-  document.getElementById('points').value = 1;
-}
+        const a1 = teamA1.value, a2 = teamA2.value, b1 = teamB1.value, b2 = teamB2.value;
+        const winner = document.getElementById('winner').value;
+        const points = Number(document.getElementById('points').value) || 1;
+      
+        if (!a1 || !a2 || !b1 || !b2 || !winner) {
+          alert('Please select all players and a winner.');
+          return;
+        }
+      
+        // STEP 1: Add match to Airtable (store player IDs)
+        const matchUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`;
+        const matchBody = {
+          fields: {
+            ts: new Date().toISOString(),
+            teamA1: [a1],
+            teamA2: [a2],
+            teamB1: [b1],
+            teamB2: [b2],
+            winner,
+            bonus: 0,
+            winPts: points
+          }
+        };
+      
+        const matchRes = await fetch(matchUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(matchBody)
+        });
+      
+        const matchData = await matchRes.json();
+        console.log('Match added:', matchData);
+      
+        // STEP 2: Update player stats directly by ID
+        const winners = winner === 'A' ? [a1, a2] : [b1, b2];
+        const losers  = winner === 'A' ? [b1, b2] : [a1, a2];
+      
+        await updatePlayerStats(winners, 'win', points);
+        await updatePlayerStats(losers, 'loss', 0);
+      
+        await loadPlayers();
+        await loadMatches();
+        document.getElementById('winner').value = '';
+        document.getElementById('points').value = 1;
+      }
 
  // ===== HELPER FUNCTION TO UPDATE STATS =====
-async function updatePlayerStats(playerNames, result, pts) {
+async function updatePlayerStats(playerIds, result, pts) {
   const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
-  });
-  const data = await res.json();
 
-  for (const playerName of playerNames) {
-    const record = data.records.find(r =>
-      r.fields.name === playerName || r.fields.Name === playerName
-    );
-    if (!record) {
-      console.warn('⚠️ Player not found in Airtable:', playerName);
+  for (const recId of playerIds) {
+    // Fetch the specific player record
+    const res = await fetch(`${url}/${recId}`, {
+      headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
+    });
+    const data = await res.json();
+
+    if (!data.fields) {
+      console.warn('Player record not found for ID:', recId);
       continue;
     }
 
-    const f = record.fields;
-    const wins   = parseInt(f.wins   ?? f.Wins   ?? 0);
-    const losses = parseInt(f.losses ?? f.Losses ?? 0);
-    const points = parseInt(f.points ?? f.Points ?? 0);
+    const f = data.fields;
+    const wins   = parseInt(f.wins   ?? 0);
+    const losses = parseInt(f.losses ?? 0);
+    const points = parseInt(f.points ?? 0);
 
     const update = {
-      id: record.id,
       fields: {
         wins: result === 'win'  ? wins + 1   : wins,
         losses: result === 'loss' ? losses + 1 : losses,
@@ -303,9 +303,7 @@ async function updatePlayerStats(playerNames, result, pts) {
       }
     };
 
-    console.log('📦 Sending PATCH for', playerName, JSON.stringify(update, null, 2));
-
-    const patchRes = await fetch(url, {
+    const patchRes = await fetch(`${url}/${recId}`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${AIRTABLE_TOKEN}`,
@@ -314,12 +312,8 @@ async function updatePlayerStats(playerNames, result, pts) {
       body: JSON.stringify(update)
     });
 
-    const text = await patchRes.text();
-    console.log('📬 PATCH response for', playerName, patchRes.status, text);
-
-    if (!patchRes.ok) {
-      alert(`Error updating ${playerName}: ${text}`);
-    }
+    const patchData = await patchRes.json();
+    console.log(`Updated ${recId}:`, patchRes.status, patchData);
   }
 }
 
