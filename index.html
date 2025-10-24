@@ -276,44 +276,54 @@ async function loadMatches() {
 
  // ===== HELPER FUNCTION TO UPDATE STATS =====
 async function updatePlayerStats(playerIds, result, pts) {
-  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`;
+  const baseUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`;
 
   for (const recId of playerIds) {
-    // Fetch the specific player record
-    const res = await fetch(`${url}/${recId}`, {
-      headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
-    });
-    const data = await res.json();
+    try {
+      // Fetch the existing player first
+      const getRes = await fetch(`${baseUrl}/${recId}`, {
+        headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
+      });
+      const existing = await getRes.json();
 
-    if (!data.fields) {
-      console.warn('Player record not found for ID:', recId);
-      continue;
-    }
-
-    const f = data.fields;
-    const wins   = parseInt(f.wins   ?? 0);
-    const losses = parseInt(f.losses ?? 0);
-    const points = parseInt(f.points ?? 0);
-
-    const update = {
-      fields: {
-        wins: result === 'win'  ? wins + 1   : wins,
-        losses: result === 'loss' ? losses + 1 : losses,
-        points: result === 'win'  ? points + pts : points
+      if (!existing.fields) {
+        console.warn('⚠️ No fields found for record', recId, existing);
+        continue;
       }
-    };
 
-    const patchRes = await fetch(`${url}/${recId}`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(update)
-    });
+      const f = existing.fields;
+      const wins   = Number.isFinite(parseInt(f.wins))   ? parseInt(f.wins)   : 0;
+      const losses = Number.isFinite(parseInt(f.losses)) ? parseInt(f.losses) : 0;
+      const points = Number.isFinite(parseInt(f.points)) ? parseInt(f.points) : 0;
 
-    const patchData = await patchRes.json();
-    console.log(`Updated ${recId}:`, patchRes.status, patchData);
+      const updateBody = {
+        fields: {
+          wins:   result === 'win'  ? wins + 1   : wins,
+          losses: result === 'loss' ? losses + 1 : losses,
+          points: result === 'win'  ? points + pts : points
+        }
+      };
+
+      console.log('📦 PATCH', recId, JSON.stringify(updateBody));
+
+      const patchRes = await fetch(`${baseUrl}/${recId}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updateBody)
+      });
+
+      const text = await patchRes.text();
+      console.log('📬 PATCH result', recId, patchRes.status, text);
+
+      if (!patchRes.ok) {
+        alert(`Error updating record ${recId}: ${text}`);
+      }
+    } catch (err) {
+      console.error('Error updating', recId, err);
+    }
   }
 }
 
