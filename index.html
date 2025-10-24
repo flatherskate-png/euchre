@@ -206,6 +206,7 @@
       const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
       const data = await res.json();
+      console.log('Raw matches payload:', data);
       const tbody = document.getElementById('matches-body');
       tbody.innerHTML = '';
     
