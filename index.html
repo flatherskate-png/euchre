@@ -1,204 +1,265 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Euchre Club Leaderboard</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 2em; background: #f4f7f6; color: #333; }
-    h1 { color: #275f49; }
-    button { margin: 4px; padding: 6px 12px; background: #275f49; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    button:hover { background: #357a5f; }
-    table { border-collapse: collapse; width: 100%; margin-top: 1em; background: white; }
-    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-    th { background: #e4f2d4; }
-    input[type=text] { padding: 5px; margin: 4px; }
-    .section { background: white; padding: 1em; border-radius: 6px; margin-bottom: 1em; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f8f9f8;
+      margin: 0;
+      padding: 2rem;
+      color: #222;
+    }
+    h1, h2 {
+      color: #275f49;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 700px;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-top: 1rem;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #e4f2d4;
+      color: #275f49;
+    }
+    .form-box {
+      margin-top: 2rem;
+      background: #fff;
+      padding: 1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      max-width: 500px;
+    }
+    input[type=text], select, input[type=number] {
+      width: 70%;
+      padding: 8px;
+      margin: 5px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      background: #275f49;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    button:hover {
+      background: #1e4a39;
+    }
+    hr {
+      margin: 3rem 0 2rem;
+    }
   </style>
 </head>
 <body>
+  <h1>Euchre Club Leaderboard</h1>
 
-<h1>Euchre Club Leaderboard</h1>
-
-<div class="section">
-  <h3>Add Player</h3>
-  <input id="newPlayerName" type="text" placeholder="Player name">
-  <button id="addPlayerBtn">Add Player</button>
-</div>
-
-<div class="section">
-  <h3>Generate Schedule</h3>
-  <button id="lockTeamsBtn">Lock Teams & Build Schedule</button>
-</div>
-
-<div class="section">
-  <h3>Lock Results</h3>
-  <button id="lockResultsBtn">Lock Results</button>
-</div>
-
-<div class="section">
-  <h3>Leaderboard</h3>
-  <button id="refreshBtn">🔄 Refresh Standings</button>
-  <table id="leaderboardTbl">
-    <thead><tr><th>Player</th><th>Wins</th><th>Losses</th><th>Points</th></tr></thead>
-    <tbody></tbody>
+  <table id="leaderboard">
+    <thead>
+      <tr>
+        <th>Player</th>
+        <th>Wins</th>
+        <th>Losses</th>
+        <th>Points</th>
+      </tr>
+    </thead>
+    <tbody id="leaderboard-body">
+      <tr><td colspan="4" style="text-align:center;">Loading...</td></tr>
+    </tbody>
   </table>
-</div>
 
-<script>
-// Airtable configuration
-const AIRTABLE_TOKEN = 'patiQbXhhcauYwsQM.84bc62b2b9a1edc32ac38cce6846ce03d7c7a4b6fa6bca7cb141e0e75722ff97';      // your personal access token
-const AIRTABLE_BASE = 'appiiakeJWvHtrd2h';       // your base ID
-const PLAYERS_TABLE = 'players';               // exact table name
-const MATCHES_TABLE = 'matches';               // exact table name
-// === CONFIGURATION ===
-//const PLAYERS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_zE09fFB-tsg-_WnU7nkcVWOZGFyD0584JWVfYc9cCAYyyDCU51YCXqNUqA2et0vBKmEDSlQWZoph/pub?gid=640638490&single=true&output=csv';
-//const MATCHES_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_zE09fFB-tsg-_WnU7nkcVWOZGFyD0584JWVfYc9cCAYyyDCU51YCXqNUqA2et0vBKmEDSlQWZoph/pub?gid=0&single=true&output=csv';
-//const APP_URL = 'https://script.google.com/macros/s/AKfycbwjQLqX8yn4jECYgZYfiX6diH9HSsqM574L-m45CJxfvsQ0kkbPdtnBcwAJC5AgiIyggQ/exec';
-//const SECRET_KEY = 'Euchre-club';
+  <div class="form-box">
+    <h3>Add Player</h3>
+    <input type="text" id="playerName" placeholder="Enter name" required />
+    <button onclick="addPlayer()">Add Player</button>
+  </div>
 
-// === STATE ===
-let state = { players: [], matches: [] };
+  <hr>
 
-// === UTILITIES ===
-async function fetchCSV(url) {
-  const bust = (url.includes('?') ? '&' : '?') + '_=' + Date.now();
-  const res = await fetch(url + bust, { cache: 'no-store' });
-  const text = await res.text();
-  return text.trim().split('\n').map(line => line.split(','));
-}
+  <h2>Match History</h2>
+  <table id="matches">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Team A</th>
+        <th>Team B</th>
+        <th>Winner</th>
+        <th>Points</th>
+      </tr>
+    </thead>
+    <tbody id="matches-body">
+      <tr><td colspan="5" style="text-align:center;">Loading...</td></tr>
+    </tbody>
+  </table>
 
-function recomputeStats() {
-  for (const p of state.players) { p.wins=0; p.losses=0; p.points=0; }
-  for (const m of state.matches) {
-    if (!m.winner) continue;
-    const winners = m.winner === 'A' ? m.teamA : m.teamB;
-    const losers = m.winner === 'A' ? m.teamB : m.teamA;
-    for (const id of winners) {
-      const p = state.players.find(x=>x.id===id);
-      if (p) { p.wins++; p.points += (m.winPts||0)+(m.bonus||0); }
-    }
-    for (const id of losers) {
-      const p = state.players.find(x=>x.id===id);
-      if (p) p.losses++;
-    }
-  }
-}
+  <div class="form-box">
+    <h3>Add Match</h3>
+    <label>Team A:</label><br>
+    <select id="teamA1"></select>
+    <select id="teamA2"></select><br>
 
-function renderLeaderboard() {
-  recomputeStats();
-  const tbody = document.querySelector('#leaderboardTbl tbody');
-  tbody.innerHTML = '';
-  const sorted = [...state.players].sort((a,b)=>b.points-a.points || b.wins-a.wins);
-  for (const p of sorted) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${p.name}</td><td>${p.wins}</td><td>${p.losses}</td><td>${p.points}</td>`;
-    tbody.appendChild(tr);
-  }
-}
+    <label>Team B:</label><br>
+    <select id="teamB1"></select>
+    <select id="teamB2"></select><br>
 
-// === DATA LOADING ===
-async function loadSeason() {
-  const [pRows, mRows] = await Promise.all([fetchCSV(PLAYERS_URL), fetchCSV(MATCHES_URL)]);
-  const [ph, ...pData] = pRows;
-  const [mh, ...mData] = mRows;
-  const pIdx = { id: ph.indexOf('id'), name: ph.indexOf('name') };
-  state.players = pData.map(r => ({ id:r[pIdx.id], name:r[pIdx.name], wins:0, losses:0, points:0 }));
-  const mIdx = {
-    ts: mh.indexOf('ts'), A1: mh.indexOf('teamA1'), A2: mh.indexOf('teamA2'),
-    B1: mh.indexOf('teamB1'), B2: mh.indexOf('teamB2'),
-    winner: mh.indexOf('winner'), bonus: mh.indexOf('bonus'), winPts: mh.indexOf('winPts'), notes: mh.indexOf('notes')
-  };
-  state.matches = mData.map(r => ({
-    ts: Number(r[mIdx.ts]),
-    teamA:[r[mIdx.A1],r[mIdx.A2]],
-    teamB:[r[mIdx.B1],r[mIdx.B2]],
-    winner:r[mIdx.winner],
-    bonus:Number(r[mIdx.bonus]||0),
-    winPts:Number(r[mIdx.winPts]||0),
-    notes:r[mIdx.notes]
-  }));
-  renderLeaderboard();
-}
+    <label>Winner:</label><br>
+    <select id="winner">
+      <option value="">Select Winner</option>
+      <option value="A">Team A</option>
+      <option value="B">Team B</option>
+    </select><br>
 
-// === POST HELPERS ===
-async function postToApp(payload) {
-  payload.secret = SECRET_KEY;
-  const res = await fetch(APP_URL, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error || 'Failed');
-  return data;
-}
+    <label>Points:</label><br>
+    <input type="number" id="points" value="1" min="1" /><br>
 
-// === BUTTON HANDLERS ===
-document.getElementById('addPlayerBtn').addEventListener('click', async ()=>{
-  const name = document.getElementById('newPlayerName').value.trim();
-  if (!name) return alert('Enter a name.');
-  const id = name.toLowerCase().replace(/[^a-z0-9]+/g,'_');
-  try {
-    await postToApp({type:'player', id, name});
-    alert('Player added!');
-    await loadSeason();
-  } catch (e) {
-    alert('Error: ' + e.message);
-  }
-});
+    <button onclick="addMatch()">Record Match</button>
+  </div>
 
-document.getElementById('lockTeamsBtn').addEventListener('click', async ()=>{
-  // simple pairing (random shuffle)
-  const ids = state.players.map(p=>p.id);
-  if (ids.length < 4) return alert('Need at least 4 players.');
-  for (let i = ids.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-  }
-  const teams = [];
-  for (let i=0;i<ids.length;i+=2) teams.push([ids[i],ids[i+1]]);
-  const matches = [];
-  for (let i=0;i<teams.length;i+=2) {
-    if (teams[i+1]) matches.push({A:teams[i], B:teams[i+1]});
-  }
-  try {
-    for (const m of matches) {
-      await postToApp({
-        type:'match',
-        ts: Date.now()+Math.floor(Math.random()*1000), // unique
-        teamA1:m.A[0], teamA2:m.A[1],
-        teamB1:m.B[0], teamB2:m.B[1],
-        winner:'', bonus:0, winPts:0, notes:'Scheduled'
+  <script>
+    // ===== CONFIG =====
+    const AIRTABLE_TOKEN = 'patiQbXhhcauYwsQM.84bc62b2b9a1edc32ac38cce6846ce03d7c7a4b6fa6bca7cb141e0e75722ff97';   // your token
+    const AIRTABLE_BASE  = 'appiiakeJWvHtrd2h';   // your base ID
+    const PLAYERS_TABLE  = 'players';           // lowercase table
+    const MATCHES_TABLE  = 'matches';           // lowercase table
+
+    // ===== LOAD PLAYERS =====
+    async function loadPlayers() {
+      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}?sort[0][field]=points&sort[0][direction]=desc`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
+      const data = await res.json();
+      const tbody = document.getElementById('leaderboard-body');
+      tbody.innerHTML = '';
+
+      if (!data.records || data.records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No players yet.</td></tr>';
+        return;
+      }
+
+      // Fill leaderboard
+      data.records.forEach(r => {
+        const f = r.fields;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${f.name || ''}</td>
+          <td>${f.wins ?? 0}</td>
+          <td>${f.losses ?? 0}</td>
+          <td>${f.points ?? 0}</td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      // Fill dropdowns
+      const selects = [teamA1, teamA2, teamB1, teamB2];
+      selects.forEach(sel => {
+        sel.innerHTML = '<option value="">--Select--</option>';
+        data.records.forEach(r => {
+          const f = r.fields;
+          const opt = document.createElement('option');
+          opt.value = f.name;
+          opt.textContent = f.name;
+          sel.appendChild(opt);
+        });
       });
     }
-    alert('Schedule posted!');
-    await loadSeason();
-  } catch (e) {
-    alert('Error: ' + e.message);
-  }
-});
 
-document.getElementById('lockResultsBtn').addEventListener('click', async ()=>{
-  const ts = prompt('Enter match timestamp (ts) to lock result:');
-  if (!ts) return;
-  const winner = prompt('Enter winner team (A or B):').toUpperCase();
-  const winPts = Number(prompt('Win points (e.g. 2):') || 0);
-  const bonus = Number(prompt('Bonus points (e.g. 1):') || 0);
-  const notes = prompt('Notes (optional):') || '';
-  try {
-    await postToApp({type:'update_match', ts:Number(ts), winner, winPts, bonus, notes});
-    alert('Result locked!');
-    await loadSeason();
-  } catch (e) {
-    alert('Error: ' + e.message);
-  }
-});
+    // ===== ADD PLAYER =====
+    async function addPlayer() {
+      const nameInput = document.getElementById('playerName');
+      const name = nameInput.value.trim();
+      if (!name) return;
+      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`;
+      const body = { fields: { name, wins: 0, losses: 0, points: 0 }};
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      nameInput.value = '';
+      await loadPlayers();
+    }
 
-document.getElementById('refreshBtn').addEventListener('click', loadSeason);
+    // ===== LOAD MATCHES =====
+    async function loadMatches() {
+      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=date&sort[0][direction]=desc`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
+      const data = await res.json();
+      const tbody = document.getElementById('matches-body');
+      tbody.innerHTML = '';
 
-// === INIT ===
-loadSeason();
-</script>
+      if (!data.records || data.records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No matches yet.</td></tr>';
+        return;
+      }
 
+      data.records.forEach(r => {
+        const f = r.fields;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${f.date || ''}</td>
+          <td>${f.teamA1 || ''}, ${f.teamA2 || ''}</td>
+          <td>${f.teamB1 || ''}, ${f.teamB2 || ''}</td>
+          <td>${f.winner || ''}</td>
+          <td>${f.points ?? 0}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    // ===== ADD MATCH =====
+    async function addMatch() {
+      const a1 = teamA1.value, a2 = teamA2.value, b1 = teamB1.value, b2 = teamB2.value;
+      const winner = document.getElementById('winner').value;
+      const points = Number(document.getElementById('points').value) || 1;
+      if (!a1 || !a2 || !b1 || !b2 || !winner) {
+        alert('Please select all players and a winner.');
+        return;
+      }
+
+      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`;
+      const body = {
+        fields: {
+          date: new Date().toISOString().split('T')[0],
+          teamA1: a1,
+          teamA2: a2,
+          teamB1: b1,
+          teamB2: b2,
+          winner,
+          points
+        }
+      };
+
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+
+      await loadMatches();
+      document.getElementById('winner').value = '';
+      document.getElementById('points').value = 1;
+    }
+
+    // ===== INITIAL LOAD =====
+    loadPlayers();
+    loadMatches();
+  </script>
 </body>
 </html>
