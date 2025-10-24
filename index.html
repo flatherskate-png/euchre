@@ -194,7 +194,7 @@
     }
 
     // ===== LOAD MATCHES =====
-   async function loadMatches() {
+async function loadMatches() {
   const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
   const data = await res.json();
@@ -231,10 +231,11 @@
     return;
   }
 
-  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`;
-  const body = {
+  // STEP 1: Add match to Airtable
+  const matchUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`;
+  const matchBody = {
     fields: {
-      ts: new Date().toISOString(), // timestamp
+      ts: new Date().toISOString(),
       teamA1: a1,
       teamA2: a2,
       teamB1: b1,
@@ -245,20 +246,67 @@
     }
   };
 
-  const res = await fetch(url, {
+  const matchRes = await fetch(matchUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${AIRTABLE_TOKEN}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify(matchBody)
   });
+  const matchData = await matchRes.json();
+  console.log('Match added:', matchData);
 
-  const data = await res.json();
-  console.log('Match added:', data);
+  // STEP 2: Determine winners and losers
+  const winners = winner === 'A' ? [a1, a2] : [b1, b2];
+  const losers  = winner === 'A' ? [b1, b2] : [a1, a2];
+
+  // STEP 3: Update players in Airtable
+  await updatePlayerStats(winners, 'win', points);
+  await updatePlayerStats(losers, 'loss', 0);
+
+  // STEP 4: Refresh UI
+  await loadPlayers();
   await loadMatches();
   document.getElementById('winner').value = '';
   document.getElementById('points').value = 1;
+}
+
+ // ===== HELPER FUNCTION TO UPDATE STATS =====
+async function updatePlayerStats(playerNames, result, pts) {
+  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
+  });
+  const data = await res.json();
+
+  for (const playerName of playerNames) {
+    const record = data.records.find(r => r.fields.name === playerName);
+    if (!record) continue;
+
+    const f = record.fields;
+    const wins   = f.wins   || 0;
+    const losses = f.losses || 0;
+    const points = f.points || 0;
+
+    const update = {
+      id: record.id,
+      fields: {
+        wins:   result === 'win'  ? wins + 1   : wins,
+        losses: result === 'loss' ? losses + 1 : losses,
+        points: result === 'win'  ? points + pts : points
+      }
+    };
+
+    await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(update)
+    });
+  }
 }
 
     // ===== INITIAL LOAD =====
