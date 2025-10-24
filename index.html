@@ -206,64 +206,83 @@
     }
 
     // ===== LOAD MATCHES =====
-    async function loadMatches() {
-      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
-      const data = await res.json();
-    
-      const tbody = document.getElementById('matches-body');
-      tbody.innerHTML = '';
-    
-      if (!data.records || data.records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No matches yet.</td></tr>';
-        return;
-      }
-    
-      // helper: prefer lookup field; otherwise resolve linked IDs via playerMap
-      const pickName = (f, linkKey, lookupKey) => {
-        // 1) try the lookup column, e.g. "name (from teamA1)"
-        const lk = f[lookupKey];
-        if (Array.isArray(lk) && lk.length) return String(lk[0]);
-    
-        // 2) use the linked record value and map via playerMap
-        const v = f[linkKey];
-        if (!v) return '';
-        if (Array.isArray(v)) {
-          const first = v[0];
-          if (!first) return '';
-          if (typeof first === 'object') {
-            // expanded object {id, name}
-            if (first.name) return first.name;
-            if (first.id && playerMap[first.id]) return playerMap[first.id];
-            return first.id || '';
-          }
-          // array of IDs
-          return playerMap[first] || String(first);
-        }
-        // single string ID
-        return playerMap[v] || String(v);
-      };
-    
-      data.records.forEach(r => {
-        const f = r.fields;
-        const dateStr = f.ts ? new Date(f.ts).toLocaleDateString() : '';
-    
-        const a1 = pickName(f, 'teamA1', 'name (from teamA1)');
-        const a2 = pickName(f, 'teamA2', 'name (from teamA2)');
-        const b1 = pickName(f, 'teamB1', 'name (from teamB1)');
-        const b2 = pickName(f, 'teamB2', 'name (from teamB2)');
-    
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${dateStr}</td>
-          <td>${[a1, a2].filter(Boolean).join(', ')}</td>
-          <td>${[b1, b2].filter(Boolean).join(', ')}</td>
-          <td>${f.winner || ''}</td>
-          <td>${f.winPts ?? 0}</td>
-        `;
-        tbody.appendChild(row);
-      });
+async function loadMatches() {
+  const matchesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`;
+  const res = await fetch(matchesUrl, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
+  const data = await res.json();
+
+  const tbody = document.getElementById('matches-body');
+  tbody.innerHTML = '';
+
+  if (!data.records || data.records.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No matches yet.</td></tr>';
+    return;
+  }
+
+  // --- Normalize linked field value into a single recordId string (or "")
+  const extractId = (val) => {
+    if (!val) return '';
+    if (Array.isArray(val)) {
+      const first = val[0];
+      if (!first) return '';
+      if (typeof first === 'object') return first.id || ''; // [{id, name}] shape
+      return String(first);                                  // ["rec..."] shape
     }
+    if (typeof val === 'object') return val.id || '';        // {id, name}
+    return String(val);                                      // "rec..."
+  };
+
+  // --- Gather all player IDs referenced in these matches
+  const neededIds = new Set();
+  for (const r of data.records) {
+    const f = r.fields || {};
+    ['teamA1','teamA2','teamB1','teamB2'].forEach(k => {
+      const rid = extractId(f[k]);
+      if (rid && !playerMap[rid]) neededIds.add(rid);
+    });
+  }
+
+  // --- Backfill unknown IDs from Airtable (so we ALWAYS have names)
+  if (neededIds.size > 0) {
+    // Build a filterByFormula: OR(RECORD_ID()='id1', RECORD_ID()='id2', ...)
+    const clauses = Array.from(neededIds).map(id => `RECORD_ID()='${id}'`);
+    const formula = `OR(${clauses.join(',')})`;
+    const playersUrl =
+      `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}?filterByFormula=${encodeURIComponent(formula)}`;
+
+    const pres = await fetch(playersUrl, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
+    const pdata = await pres.json();
+    (pdata.records || []).forEach(rec => {
+      const nm = (rec.fields && (rec.fields.name || rec.fields.Name)) || `(${rec.id})`;
+      playerMap[rec.id] = nm;
+    });
+  }
+
+  // --- Helper to turn any linked value into a readable name using playerMap
+  const idToName = (val) => {
+    const rid = extractId(val);
+    return rid ? (playerMap[rid] || rid) : '';
+  };
+
+  // --- Render table
+  for (const r of data.records) {
+    const f = r.fields || {};
+    const dateStr = f.ts ? new Date(f.ts).toLocaleDateString() : '';
+
+    const teamA = [idToName(f.teamA1), idToName(f.teamA2)].filter(Boolean).join(', ');
+    const teamB = [idToName(f.teamB1), idToName(f.teamB2)].filter(Boolean).join(', ');
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${dateStr}</td>
+      <td>${teamA}</td>
+      <td>${teamB}</td>
+      <td>${f.winner || ''}</td>
+      <td>${f.winPts ?? 0}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
 
 
     // ===== ADD MATCH =====
@@ -370,8 +389,6 @@ async function updatePlayerStats(playerIds, result, pts) {
   }
 }
 
-
-    // ===== INITIAL LOAD =====
     // ===== INITIAL LOAD =====
     async function init() {
       await loadPlayers();  // builds playerMap first
