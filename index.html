@@ -133,6 +133,8 @@
     const AIRTABLE_BASE  = 'appiiakeJWvHtrd2h';   // your base ID
     const PLAYERS_TABLE  = 'players';           // lowercase table
     const MATCHES_TABLE  = 'matches';           // lowercase table
+    let playerMap = {};  // global map of recordId → player name
+
 
     // ===== LOAD PLAYERS =====
     async function loadPlayers() {
@@ -165,6 +167,8 @@
       data.records.forEach(r => {
         playerMap[r.id] = r.fields.name;
       });
+      console.log('Built playerMap:', playerMap);
+
 
       // Fill dropdowns
       // Fill dropdowns with player name + ID
