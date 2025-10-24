@@ -449,6 +449,7 @@ async function updatePlayerStats(playerIds, result, pts) {
     // ===== INITIAL LOAD =====
     async function init() {
       await loadPlayers();  // builds playerMap first
+      await recalcFromMatches();  // compute + patch correct totals
       await loadMatches();  // then loads match history
     }
     init();
