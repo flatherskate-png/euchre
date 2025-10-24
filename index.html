@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Euchre Club Leaderboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; background: #f4f7f6; color: #333; }
+    h1 { color: #275f49; }
+    button { margin: 4px; padding: 6px 12px; background: #275f49; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #357a5f; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1em; background: white; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+    th { background: #e4f2d4; }
+    input[type=text] { padding: 5px; margin: 4px; }
+    .section { background: white; padding: 1em; border-radius: 6px; margin-bottom: 1em; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+
+<h1>Euchre Club Leaderboard</h1>
+
+<div class="section">
+  <h3>Add Player</h3>
+  <input id="newPlayerName" type="text" placeholder="Player name">
+  <button id="addPlayerBtn">Add Player</button>
+</div>
+
+<div class="section">
+  <h3>Generate Schedule</h3>
+  <button id="lockTeamsBtn">Lock Teams & Build Schedule</button>
+</div>
+
+<div class="section">
+  <h3>Lock Results</h3>
+  <button id="lockResultsBtn">Lock Results</button>
+</div>
+
+<div class="section">
+  <h3>Leaderboard</h3>
+  <button id="refreshBtn">🔄 Refresh Standings</button>
+  <table id="leaderboardTbl">
+    <thead><tr><th>Player</th><th>Wins</th><th>Losses</th><th>Points</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+// === CONFIGURATION ===
+const PLAYERS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_zE09fFB-tsg-_WnU7nkcVWOZGFyD0584JWVfYc9cCAYyyDCU51YCXqNUqA2et0vBKmEDSlQWZoph/pub?gid=640638490&single=true&output=csv';
+const MATCHES_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_zE09fFB-tsg-_WnU7nkcVWOZGFyD0584JWVfYc9cCAYyyDCU51YCXqNUqA2et0vBKmEDSlQWZoph/pub?gid=0&single=true&output=csv';
+const APP_URL = 'https://script.google.com/macros/s/AKfycbyi5YVluWgLa__RdLnDYXMykp7OAJ6yjo9U_J5ZLtjQnL-B4pYvxQHBnzFtoWi9L42u/exec';
+const SECRET_KEY = 'Euchre-club';
+
+// === STATE ===
+let state = { players: [], matches: [] };
+
+// === UTILITIES ===
+async function fetchCSV(url) {
+  const bust = (url.includes('?') ? '&' : '?') + '_=' + Date.now();
+  const res = await fetch(url + bust, { cache: 'no-store' });
+  const text = await res.text();
+  return text.trim().split('\n').map(line => line.split(','));
+}
+
+function recomputeStats() {
+  for (const p of state.players) { p.wins=0; p.losses=0; p.points=0; }
+  for (const m of state.matches) {
+    if (!m.winner) continue;
+    const winners = m.winner === 'A' ? m.teamA : m.teamB;
+    const losers = m.winner === 'A' ? m.teamB : m.teamA;
+    for (const id of winners) {
+      const p = state.players.find(x=>x.id===id);
+      if (p) { p.wins++; p.points += (m.winPts||0)+(m.bonus||0); }
+    }
+    for (const id of losers) {
+      const p = state.players.find(x=>x.id===id);
+      if (p) p.losses++;
+    }
+  }
+}
+
+function renderLeaderboard() {
+  recomputeStats();
+  const tbody = document.querySelector('#leaderboardTbl tbody');
+  tbody.innerHTML = '';
+  const sorted = [...state.players].sort((a,b)=>b.points-a.points || b.wins-a.wins);
+  for (const p of sorted) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${p.name}</td><td>${p.wins}</td><td>${p.losses}</td><td>${p.points}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// === DATA LOADING ===
+async function loadSeason() {
+  const [pRows, mRows] = await Promise.all([fetchCSV(PLAYERS_URL), fetchCSV(MATCHES_URL)]);
+  const [ph, ...pData] = pRows;
+  const [mh, ...mData] = mRows;
+  const pIdx = { id: ph.indexOf('id'), name: ph.indexOf('name') };
+  state.players = pData.map(r => ({ id:r[pIdx.id], name:r[pIdx.name], wins:0, losses:0, points:0 }));
+  const mIdx = {
+    ts: mh.indexOf('ts'), A1: mh.indexOf('teamA1'), A2: mh.indexOf('teamA2'),
+    B1: mh.indexOf('teamB1'), B2: mh.indexOf('teamB2'),
+    winner: mh.indexOf('winner'), bonus: mh.indexOf('bonus'), winPts: mh.indexOf('winPts'), notes: mh.indexOf('notes')
+  };
+  state.matches = mData.map(r => ({
+    ts: Number(r[mIdx.ts]),
+    teamA:[r[mIdx.A1],r[mIdx.A2]],
+    teamB:[r[mIdx.B1],r[mIdx.B2]],
+    winner:r[mIdx.winner],
+    bonus:Number(r[mIdx.bonus]||0),
+    winPts:Number(r[mIdx.winPts]||0),
+    notes:r[mIdx.notes]
+  }));
+  renderLeaderboard();
+}
+
+// === POST HELPERS ===
+async function postToApp(payload) {
+  payload.secret = SECRET_KEY;
+  const res = await fetch(APP_URL, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Failed');
+  return data;
+}
+
+// === BUTTON HANDLERS ===
+document.getElementById('addPlayerBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('newPlayerName').value.trim();
+  if (!name) return alert('Enter a name.');
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g,'_');
+  try {
+    await postToApp({type:'player', id, name});
+    alert('Player added!');
+    await loadSeason();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+});
+
+document.getElementById('lockTeamsBtn').addEventListener('click', async ()=>{
+  // simple pairing (random shuffle)
+  const ids = state.players.map(p=>p.id);
+  if (ids.length < 4) return alert('Need at least 4 players.');
+  for (let i = ids.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+  }
+  const teams = [];
+  for (let i=0;i<ids.length;i+=2) teams.push([ids[i],ids[i+1]]);
+  const matches = [];
+  for (let i=0;i<teams.length;i+=2) {
+    if (teams[i+1]) matches.push({A:teams[i], B:teams[i+1]});
+  }
+  try {
+    for (const m of matches) {
+      await postToApp({
+        type:'match',
+        ts: Date.now()+Math.floor(Math.random()*1000), // unique
+        teamA1:m.A[0], teamA2:m.A[1],
+        teamB1:m.B[0], teamB2:m.B[1],
+        winner:'', bonus:0, winPts:0, notes:'Scheduled'
+      });
+    }
+    alert('Schedule posted!');
+    await loadSeason();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+});
+
+document.getElementById('lockResultsBtn').addEventListener('click', async ()=>{
+  const ts = prompt('Enter match timestamp (ts) to lock result:');
+  if (!ts) return;
+  const winner = prompt('Enter winner team (A or B):').toUpperCase();
+  const winPts = Number(prompt('Win points (e.g. 2):') || 0);
+  const bonus = Number(prompt('Bonus points (e.g. 1):') || 0);
+  const notes = prompt('Notes (optional):') || '';
+  try {
+    await postToApp({type:'update_match', ts:Number(ts), winner, winPts, bonus, notes});
+    alert('Result locked!');
+    await loadSeason();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+});
+
+document.getElementById('refreshBtn').addEventListener('click', loadSeason);
+
+// === INIT ===
+loadSeason();
+</script>
+
+</body>
+</html>
