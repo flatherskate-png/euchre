@@ -221,21 +221,26 @@
       // helper to safely translate an Airtable value to a name
       const idToName = (val) => {
         if (!val) return '';
-        // if it's an array of IDs
+        
+        // If it's a linked record array, Airtable often sends objects with {id, name}
         if (Array.isArray(val)) {
           const first = val[0];
-          // if array of objects
-          if (first && typeof first === 'object') {
+          if (!first) return '';
+          if (typeof first === 'object') {
+            // Linked record object form: { id: "rec123", name: "A" }
             if (first.name) return first.name;
             if (first.id && playerMap[first.id]) return playerMap[first.id];
             return first.id || '';
+          } else {
+            // Array of IDs
+            return playerMap[first] || first;
           }
-          // if array of strings (IDs)
-          return playerMap[first] || first;
         }
-        // if it's just a string ID
+      
+        // Single string ID fallback
         return playerMap[val] || val;
       };
+
     
       data.records.forEach(r => {
         const f = r.fields;
