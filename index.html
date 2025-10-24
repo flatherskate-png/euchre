@@ -206,7 +206,7 @@
     }
 
     // ===== LOAD MATCHES =====
-   async function loadMatches() {
+    async function loadMatches() {
       const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }});
       const data = await res.json();
@@ -218,29 +218,25 @@
         return;
       }
     
-      // helper to safely translate an Airtable value to a name
+      // Helper function to normalize names
       const idToName = (val) => {
         if (!val) return '';
-        
-        // If it's a linked record array, Airtable often sends objects with {id, name}
+        // linked record arrays
         if (Array.isArray(val)) {
           const first = val[0];
           if (!first) return '';
+          // If Airtable expanded linked records (object form)
           if (typeof first === 'object') {
-            // Linked record object form: { id: "rec123", name: "A" }
             if (first.name) return first.name;
             if (first.id && playerMap[first.id]) return playerMap[first.id];
             return first.id || '';
-          } else {
-            // Array of IDs
-            return playerMap[first] || first;
           }
+          // Array of IDs
+          return playerMap[first] || first;
         }
-      
-        // Single string ID fallback
+        // Single string ID
         return playerMap[val] || val;
       };
-
     
       data.records.forEach(r => {
         const f = r.fields;
@@ -264,7 +260,6 @@
         tbody.appendChild(row);
       });
     }
-    
 
 
     // ===== ADD MATCH =====
