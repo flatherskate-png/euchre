@@ -1,9 +1,3 @@
-// Airtable configuration
-const AIRTABLE_TOKEN = 'patXXXXXXXXXXXX';      // your personal access token
-const AIRTABLE_BASE = 'appXXXXXXXXXXXX';       // your base ID
-const PLAYERS_TABLE = 'Players';               // exact table name
-const MATCHES_TABLE = 'Matches';               // exact table name
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -51,11 +45,16 @@ const MATCHES_TABLE = 'Matches';               // exact table name
 </div>
 
 <script>
+// Airtable configuration
+const AIRTABLE_TOKEN = 'patiQbXhhcauYwsQM.84bc62b2b9a1edc32ac38cce6846ce03d7c7a4b6fa6bca7cb141e0e75722ff97';      // your personal access token
+const AIRTABLE_BASE = 'appiiakeJWvHtrd2h';       // your base ID
+const PLAYERS_TABLE = 'players';               // exact table name
+const MATCHES_TABLE = 'matches';               // exact table name
 // === CONFIGURATION ===
-const PLAYERS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_zE09fFB-tsg-_WnU7nkcVWOZGFyD0584JWVfYc9cCAYyyDCU51YCXqNUqA2et0vBKmEDSlQWZoph/pub?gid=640638490&single=true&output=csv';
-const MATCHES_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_zE09fFB-tsg-_WnU7nkcVWOZGFyD0584JWVfYc9cCAYyyDCU51YCXqNUqA2et0vBKmEDSlQWZoph/pub?gid=0&single=true&output=csv';
-const APP_URL = 'https://script.google.com/macros/s/AKfycbwjQLqX8yn4jECYgZYfiX6diH9HSsqM574L-m45CJxfvsQ0kkbPdtnBcwAJC5AgiIyggQ/exec';
-const SECRET_KEY = 'Euchre-club';
+//const PLAYERS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_zE09fFB-tsg-_WnU7nkcVWOZGFyD0584JWVfYc9cCAYyyDCU51YCXqNUqA2et0vBKmEDSlQWZoph/pub?gid=640638490&single=true&output=csv';
+//const MATCHES_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS_zE09fFB-tsg-_WnU7nkcVWOZGFyD0584JWVfYc9cCAYyyDCU51YCXqNUqA2et0vBKmEDSlQWZoph/pub?gid=0&single=true&output=csv';
+//const APP_URL = 'https://script.google.com/macros/s/AKfycbwjQLqX8yn4jECYgZYfiX6diH9HSsqM574L-m45CJxfvsQ0kkbPdtnBcwAJC5AgiIyggQ/exec';
+//const SECRET_KEY = 'Euchre-club';
 
 // === STATE ===
 let state = { players: [], matches: [] };
