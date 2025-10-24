@@ -279,32 +279,31 @@ async function updatePlayerStats(playerNames, result, pts) {
     headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
   });
   const data = await res.json();
-  console.log('All players:', data.records.map(r => r.fields.name || r.fields.Name));
 
   for (const playerName of playerNames) {
     const record = data.records.find(r =>
       r.fields.name === playerName || r.fields.Name === playerName
     );
     if (!record) {
-      console.warn('Player not found in Airtable:', playerName);
+      console.warn('⚠️ Player not found in Airtable:', playerName);
       continue;
     }
 
     const f = record.fields;
-    const wins   = f.wins   ?? f.Wins   ?? 0;
-    const losses = f.losses ?? f.Losses ?? 0;
-    const points = f.points ?? f.Points ?? 0;
+    const wins   = parseInt(f.wins   ?? f.Wins   ?? 0);
+    const losses = parseInt(f.losses ?? f.Losses ?? 0);
+    const points = parseInt(f.points ?? f.Points ?? 0);
 
     const update = {
       id: record.id,
       fields: {
-        wins:   result === 'win'  ? wins + 1   : wins,
+        wins: result === 'win'  ? wins + 1   : wins,
         losses: result === 'loss' ? losses + 1 : losses,
         points: result === 'win'  ? points + pts : points
       }
     };
 
-    console.log('Updating', playerName, update);
+    console.log('📦 Sending PATCH for', playerName, JSON.stringify(update, null, 2));
 
     const patchRes = await fetch(url, {
       method: 'PATCH',
@@ -315,8 +314,12 @@ async function updatePlayerStats(playerNames, result, pts) {
       body: JSON.stringify(update)
     });
 
-    const patchData = await patchRes.json();
-    console.log('Patch result for', playerName, patchRes.status, patchData);
+    const text = await patchRes.text();
+    console.log('📬 PATCH response for', playerName, patchRes.status, text);
+
+    if (!patchRes.ok) {
+      alert(`Error updating ${playerName}: ${text}`);
+    }
   }
 }
 
