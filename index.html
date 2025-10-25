@@ -236,7 +236,7 @@
         for(const [p1,p2] of round){
           await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`,{
             method:'POST',headers:{...authHeader,'Content-Type':'application/json'},
-            body:JSON.stringify({fields:{ts:date,nights:[night.id],teamA1:[p1],teamB1:[p2],winner:'',winPts:1,status:'pending'}})
+            body:JSON.stringify({fields:{ts:new Date().toISOString(),nights:[night.id],teamA1:[p1],teamB1:[p2],winner:'',winPts:1,status:'pending'}})
           });
           console.log(`DEBUG: Created match ${playerMap[p1]} vs ${playerMap[p2]}`);
         }
