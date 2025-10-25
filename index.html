@@ -306,28 +306,33 @@ async function endGameNight() {
 
   console.log("DEBUG: Updated night status → complete", nightRes.status);
 
-  // 2️⃣ Cancel any remaining pending matches for this night
-  const filter = encodeURIComponent(`AND(status='pending',ARRAYJOIN(nights)='${currentNight}')`);
-  const matchesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?filterByFormula=${filter}`;
-  const res = await fetch(matchesUrl, { headers: authHeader });
-  const data = await res.json();
+ // 2️⃣ Cancel any remaining pending matches for this night (safe local filter)
+console.log("DEBUG: Looking for pending matches linked to", currentNight);
 
-  console.log(`DEBUG: Found ${data.records?.length || 0} pending matches to cancel`);
+const allMatchesRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`, { headers: authHeader });
+const allMatchesData = await allMatchesRes.json();
 
-  if (data.records && data.records.length > 0) {
-    for (const rec of data.records) {
-      const cancelUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${rec.id}`;
-      const cancelBody = { fields: { status: "cancelled" } };
+const pendingMatches = (allMatchesData.records || []).filter(rec => {
+  const f = rec.fields || {};
+  return f.status === "pending" && Array.isArray(f.nights) && f.nights.includes(currentNight);
+});
 
-      const cancelRes = await fetch(cancelUrl, {
-        method: "PATCH",
-        headers: { ...authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify(cancelBody)
-      });
+console.log(`DEBUG: Found ${pendingMatches.length} pending matches to cancel`, pendingMatches);
 
-      console.log("DEBUG: Cancelled match", rec.id, cancelRes.status);
-    }
-  }
+for (const rec of pendingMatches) {
+  const cancelUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${rec.id}`;
+  const cancelBody = { fields: { status: "cancelled" } };
+
+  const cancelRes = await fetch(cancelUrl, {
+    method: "PATCH",
+    headers: { ...authHeader, "Content-Type": "application/json" },
+    body: JSON.stringify(cancelBody)
+  });
+
+  console.log("DEBUG: Cancelled match", rec.id, cancelRes.status);
+}
+}
+
 
   await recalcFromMatches();
   await loadMatches();
