@@ -268,7 +268,7 @@ function roundRobinTeams(teams){
       return rounds;
     }
 
- // ===== START GAME NIGHT =====
+// ===== START GAME NIGHT =====
 async function startGameNight() {
   const selected = [...document.querySelectorAll('.playerCheck:checked')].map(c => c.value);
   if (selected.length < 4) {
@@ -298,7 +298,8 @@ async function startGameNight() {
   document.getElementById('nightStatusMsg').innerText = 'Game night started!';
   document.getElementById('endNightBtn').classList.remove('hidden');
 
-  // 2️⃣ Randomize teams of two
+  // 2️⃣ Create random teams of two
+  const colors = ['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple', 'Pink', 'Black', 'White'];
   function shuffle(arr) {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
@@ -311,21 +312,22 @@ async function startGameNight() {
   const shuffled = shuffle(selected);
   const teams = [];
   for (let i = 0; i + 1 < shuffled.length; i += 2) {
-    teams.push([shuffled[i], shuffled[i + 1]]);
+    const color = colors[teams.length % colors.length];
+    teams.push({ name: `${color} Team`, players: [shuffled[i], shuffled[i + 1]] });
   }
   const bench = shuffled.length % 2 === 1 ? shuffled[shuffled.length - 1] : null;
 
-  console.log('DEBUG: Teams generated', teams.map(t => t.map(id => playerMap[id])));
-  if (bench) console.log('DEBUG: Bench player:', bench, playerMap[bench] || bench);
+  console.log('DEBUG: Teams generated', teams);
+  if (bench) console.log('DEBUG: Bench player:', playerMap[bench] || bench);
 
   if (teams.length < 2) {
     alert('Not enough teams to schedule matches.');
     return;
   }
 
-  // 3️⃣ Generate a round-robin schedule between teams
-  function roundRobinTeams(teams) {
-    const nTeams = teams.length;
+  // 3️⃣ Generate round-robin schedule among teams
+  function roundRobinTeams(teamCount) {
+    const nTeams = teamCount;
     let names = Array.from({ length: nTeams }, (_, i) => i);
     let bye = null;
     if (nTeams % 2 === 1) {
@@ -342,7 +344,7 @@ async function startGameNight() {
         const a = arr[i],
           b = arr[n - 1 - i];
         if (a === bye || b === bye) continue;
-        matches.push([a, b]); // team indexes
+        matches.push([a, b]);
       }
       rounds.push(matches);
       arr = [arr[0]].concat([arr[n - 1]]).concat(arr.slice(1, n - 1));
@@ -350,46 +352,81 @@ async function startGameNight() {
     return rounds;
   }
 
-  const rounds = roundRobinTeams(teams);
-  console.log('DEBUG: Round-robin rounds generated', rounds);
+  const rounds = roundRobinTeams(teams.length);
+  console.log('DEBUG: Round-robin schedule', rounds);
 
-  // 4️⃣ Create Airtable match records
-  for (const round of rounds) {
-    for (const [ti, tj] of round) {
-      const [a1, a2] = teams[ti];
-      const [b1, b2] = teams[tj];
+  // 4️⃣ Show preview table before posting to Airtable
+  const previewDiv = document.createElement('div');
+  previewDiv.className = 'form-box';
+  previewDiv.innerHTML = `<h3>Team Preview</h3>
+    <table>
+      <thead><tr><th>Team</th><th>Players</th></tr></thead>
+      <tbody>
+        ${teams.map(t =>
+          `<tr><td>${t.name}</td><td>${t.players.map(p => playerMap[p] || p).join(', ')}</td></tr>`
+        ).join('')}
+      </tbody>
+    </table>
+    ${bench ? `<p><em>Bench player: ${playerMap[bench] || bench}</em></p>` : ''}
+    <h3>Match Schedule (Preview)</h3>
+    <table>
+      <thead><tr><th>Round</th><th>Matchups</th></tr></thead>
+      <tbody>
+        ${rounds.map((matches, i) => `
+          <tr><td>Round ${i + 1}</td>
+          <td>${matches.map(([a, b]) =>
+            `${teams[a].name} vs ${teams[b].name}`
+          ).join('<br>')}</td></tr>
+        `).join('')}
+      </tbody>
+    </table>
+    <button id="confirmMatchesBtn">✅ Confirm and Create Matches</button>
+  `;
 
-      const matchBody = {
-        fields: {
-          ts: new Date().toISOString(),
-          nights: [String(night.id)],
-          teamA1: [a1],
-          teamA2: [a2],
-          teamB1: [b1],
-          teamB2: [b2],
-          winner: '',
-          winPts: 1,
-          status: 'pending'
-        }
-      };
+  // Insert preview below game night box
+  const nightBox = document.getElementById('gameNightBox');
+  nightBox.parentNode.insertBefore(previewDiv, nightBox.nextSibling);
 
-      console.log(
-        'DEBUG: Creating match',
-        `${playerMap[a1]} & ${playerMap[a2]} vs ${playerMap[b1]} & ${playerMap[b2]}`
-      );
+  // 5️⃣ Attach event listener for confirmation
+  document.getElementById('confirmMatchesBtn').onclick = async () => {
+    document.getElementById('confirmMatchesBtn').disabled = true;
+    document.getElementById('confirmMatchesBtn').innerText = 'Creating matches...';
 
-      const matchRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`, {
-        method: 'POST',
-        headers: { ...authHeader, 'Content-Type': 'application/json' },
-        body: JSON.stringify(matchBody)
-      });
+    for (const round of rounds) {
+      for (const [ti, tj] of round) {
+        const teamA = teams[ti];
+        const teamB = teams[tj];
+        const [a1, a2] = teamA.players;
+        const [b1, b2] = teamB.players;
 
-      console.log('DEBUG: Match POST result', matchRes.status, await matchRes.text());
+        const matchBody = {
+          fields: {
+            ts: new Date().toISOString(),
+            nights: [String(night.id)],
+            teamA1: [a1],
+            teamA2: [a2],
+            teamB1: [b1],
+            teamB2: [b2],
+            winner: '',
+            winPts: 1,
+            status: 'pending'
+          }
+        };
+
+        console.log(`DEBUG: Posting match: ${teamA.name} vs ${teamB.name}`);
+        const matchRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`, {
+          method: 'POST',
+          headers: { ...authHeader, 'Content-Type': 'application/json' },
+          body: JSON.stringify(matchBody)
+        });
+        console.log('DEBUG: Match POST result', matchRes.status, await matchRes.text());
+      }
     }
-  }
 
-  // 5️⃣ Refresh match table
-  await loadMatches();
+    await loadMatches();
+    previewDiv.remove();
+    alert('Matches created and schedule posted!');
+  };
 }
 
 
