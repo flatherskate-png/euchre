@@ -1,32 +1,60 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Euchre Club Admin (Hardened)</title>
-<style>
-  body { font-family: system-ui, sans-serif; background:#f8f9f8; margin:0; padding:2rem; color:#222; }
-  h1,h2,h3{ color:#275f49; }
-  table { border-collapse:collapse; width:100%; max-width:760px; background:#fff;
-          box-shadow:0 1px 3px rgba(0,0,0,0.1); margin-top:1rem; }
-  th,td { border:1px solid #ddd; padding:8px; text-align:left; }
-  th { background:#e4f2d4; color:#275f49; }
-  .form-box { margin-top:2rem; background:#fff; padding:1rem; box-shadow:0 1px 3px rgba(0,0,0,0.1); max-width:760px; }
-  input,select{ padding:6px; margin:5px 0; border:1px solid #ccc; border-radius:4px; }
-  button{ background:#275f49; color:#fff; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; margin-top:8px; }
-  button:hover{ background:#1e4a39; }
-  .hidden{ display:none; }
-  .status { max-width:760px; background:#fff; border-left:4px solid #275f49; padding:8px 12px; font-size:13px; margin-top:12px;
-            box-shadow:0 1px 2px rgba(0,0,0,0.06); }
-  .status b{ color:#275f49; }
-  .status .err{ color:#a40000; }
-  .badge{ display:inline-block; font-size:11px; padding:2px 6px; border-radius:999px; background:#e4f2d4; color:#275f49; margin-left:6px; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Euchre Club Admin</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f8f9f8;
+      margin: 0;
+      padding: 2rem;
+      color: #222;
+    }
+    h1, h2, h3 { color: #275f49; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 700px;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-top: 1rem;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th { background-color: #e4f2d4; color: #275f49; }
+    .form-box {
+      margin-top: 2rem;
+      background: #fff;
+      padding: 1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      max-width: 700px;
+    }
+    input, select {
+      padding: 6px;
+      margin: 5px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      background: #275f49;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    button:hover { background: #1e4a39; }
+    .hidden { display: none; }
+  </style>
 </head>
 <body>
-  <h1>Porchlight Euchre Club — Admin <span id="envBadge" class="badge">diagnostic</span></h1>
-
-  <div class="status" id="statusPanel"><b>Status:</b> Ready.</div>
+  <h1>Porchlight Euchre Club — Admin</h1>
 
   <!-- GAME NIGHT SETUP -->
   <div class="form-box" id="gameNightBox">
@@ -34,7 +62,7 @@
     <label>Date:</label>
     <input type="date" id="nightDate"><br>
     <div id="playerCheckList"></div>
-    <button id="startBtn" onclick="startGameNight()">Start Game Night</button>
+    <button onclick="startGameNight()">Start Game Night</button>
     <button id="confirmNightBtn" class="hidden" onclick="confirmGameNight()">Confirm & Create Matches</button>
     <button id="endNightBtn" class="hidden" onclick="endGameNight()">End Night</button>
     <div id="nightStatusMsg" style="margin-top:0.5rem; color:#275f49;"></div>
@@ -79,373 +107,264 @@
     </table>
   </div>
 
-<script>
-/** ================= CONFIG ================= **/
-const AIRTABLE_TOKEN = 'patRbdM5rKU2gtz83.82c10c403e9f183593e2b2492d93a8bd78600eb4e4bdbe88a7c6318c34486d22';
-const AIRTABLE_BASE  = 'appiiakeJWvHtrd2h';
-const PLAYERS_TABLE  = 'players';
-const MATCHES_TABLE  = 'matches';
-const NIGHTS_TABLE   = 'nights';
-const authHeader = { Authorization: `Bearer ${AIRTABLE_TOKEN}` };
+  <script>
+    // ===== CONFIG =====
+    const AIRTABLE_TOKEN = 'YOUR_AIRTABLE_PAT';
+    const AIRTABLE_BASE  = 'YOUR_BASE_ID';
+    const PLAYERS_TABLE  = 'players';
+    const MATCHES_TABLE  = 'matches';
+    const NIGHTS_TABLE   = 'nights';
+    const authHeader = { Authorization: `Bearer ${AIRTABLE_TOKEN}` };
 
-let playerMap = {};
-let currentNight = localStorage.getItem('currentNight') || null;
-let tempMatches = [];
-const extractId = v => Array.isArray(v) ? v[0] : v;
+    let playerMap = {};
+    let currentNight = localStorage.getItem('currentNight') || null;
+    let tempMatches = [];
 
-/** ================ STATUS PANEL ================ **/
-const statusEl = document.getElementById('statusPanel');
-function status(msg, isErr=false){
-  const t = new Date().toLocaleTimeString();
-  statusEl.innerHTML = `<b>Status ${isErr?'<span class="err">error</span>':''}:</b> ${msg} <span style="float:right;opacity:.6">${t}</span>`;
-  console[isErr?'error':'log']('[STATUS]', msg);
-}
+    const extractId = v => Array.isArray(v) ? v[0] : v;
 
-/** ============== FETCH WRAPPER (RETRY) ============== **/
-async function apiFetch(url, options={}, label=''){
-  const maxRetries = 3;
-  const baseDelay = 350;  // ms
-  for (let attempt = 0; attempt <= maxRetries; attempt++){
-    try{
-      const res = await fetch(url, options);
-      const text = await res.text(); // read once
-      let json;
-      try{ json = text ? JSON.parse(text) : {}; } catch(e){ json = { raw: text }; }
+    // ===== LOAD PLAYERS (atomic update) =====
+    async function loadPlayers(forceChecklist=false) {
+      try {
+        const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`, { headers: authHeader });
+        const data = await res.json();
+        if (!data.records?.length) return;
 
-      if (!res.ok){
-        const msg = json?.error?.message || res.statusText || 'Unknown error';
-        // 429/5xx: retry; 4xx (not 429) -> throw
-        if ((res.status === 429 || res.status >= 500) && attempt < maxRetries){
-          const delay = baseDelay * Math.pow(2, attempt);
-          status(`${label} retrying (${attempt+1}/${maxRetries})…`, false);
-          await new Promise(r=>setTimeout(r, delay));
-          continue;
+        const newBody = document.createElement('tbody');
+        newBody.id = 'leaderboard-body';
+        playerMap = {};
+
+        data.records.forEach(r => {
+          const f = r.fields;
+          playerMap[r.id] = f.name;
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${f.name}</td><td>${f.wins||0}</td><td>${f.losses||0}</td><td>${f.points||0}</td>`;
+          newBody.appendChild(tr);
+        });
+
+        const oldBody = document.getElementById('leaderboard-body');
+        oldBody.parentNode.replaceChild(newBody, oldBody);
+
+        const list = document.getElementById('playerCheckList');
+        if (forceChecklist || !list.querySelector('input')) {
+          list.innerHTML = '<strong>Select players:</strong><br>';
+          data.records.forEach(r=>{
+            const f = r.fields;
+            const lbl = document.createElement('label');
+            lbl.innerHTML = `<input type="checkbox" class="playerCheck" value="${r.id}"> ${f.name}<br>`;
+            list.appendChild(lbl);
+          });
         }
-        throw new Error(`${label || 'Request'} failed: ${res.status} ${msg}`);
+      } catch (err) {
+        console.error('loadPlayers failed:', err);
       }
-      if (label) status(`${label} ok`);
-      return json;
-    }catch(err){
-      if (attempt < maxRetries){
-        const delay = baseDelay * Math.pow(2, attempt);
-        status(`${label} error: ${err.message}. Retrying in ${delay}ms…`, true);
-        await new Promise(r=>setTimeout(r, delay));
-        continue;
+    }
+
+    // ===== ADD PLAYER =====
+    async function addPlayer() {
+      const name = document.getElementById('playerName').value.trim();
+      if (!name) return;
+      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`, {
+        method: 'POST',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { name, wins: 0, losses: 0, points: 0 } })
+      });
+      document.getElementById('playerName').value = '';
+      await loadPlayers(true);
+    }
+
+    // ===== GENERATE TEAMS =====
+    function generateTeams(players) {
+      const s = players.slice().sort(() => 0.5 - Math.random());
+      const t = [];
+      for (let i = 0; i < s.length; i += 2) {
+        if (s[i + 1]) t.push([s[i], s[i + 1]]);
       }
-      status(`${label} failed: ${err.message}`, true);
-      throw err;
+      return t;
     }
-  }
-}
 
-/** ================ LOAD PLAYERS (SAFE) ================ **/
-let isLoadingPlayers = false;
-async function loadPlayers(forceChecklist=false){
-  if (isLoadingPlayers) return;
-  isLoadingPlayers = true;
-  try{
-    const data = await apiFetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`,
-      { headers: authHeader },
-      'loadPlayers'
-    );
-    if (!data.records || !data.records.length){
-      status('No players returned — preserving existing table', true);
-      isLoadingPlayers = false;
-      return;
+    // ===== START NIGHT =====
+    async function startGameNight() {
+      const selected = [...document.querySelectorAll('.playerCheck:checked')].map(c => c.value);
+      if (selected.length < 4 || selected.length % 2 !== 0) {
+        alert('Select an even number of players (at least 4).');
+        return;
+      }
+      const date = document.getElementById('nightDate').value || new Date().toISOString().slice(0, 10);
+      const teams = generateTeams(selected);
+
+      const nightRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}`, {
+        method: 'POST',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { date, status: 'planned', attendees: selected } })
+      });
+      const night = await nightRes.json();
+      currentNight = night.id;
+      localStorage.setItem('currentNight', currentNight);
+
+      tempMatches = teams.map(([a, b], i) => ({ teamA: a, teamB: b, idx: i + 1 }));
+      const tbody = document.getElementById('matches-body');
+      tbody.innerHTML = '';
+      tempMatches.forEach(m => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${date}</td><td>${playerMap[m.teamA]}</td><td>${playerMap[m.teamB]}</td><td colspan="3">Pending</td><td>Preview Only</td>`;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('resultsTable').classList.remove('hidden');
+      document.getElementById('nightStatusMsg').innerText = 'Night planned. Confirm to create matches.';
+      document.getElementById('confirmNightBtn').classList.remove('hidden');
     }
-    // Build table rows first (don’t clear until ready)
-    const rows = data.records.map(r=>{
-      const f = r.fields;
-      playerMap[r.id] = f.name;
-      return `<tr><td>${f.name}</td><td>${f.wins||0}</td><td>${f.losses||0}</td><td>${f.points||0}</td></tr>`;
-    }).join('');
 
-    // Commit DOM update atomically
-    const tbody = document.getElementById('leaderboard-body');
-    tbody.innerHTML = rows;
+    // ===== CONFIRM NIGHT =====
+    async function confirmGameNight() {
+      if (!currentNight) return alert('No planned night found.');
+      if (!tempMatches.length) return alert('No matches to confirm.');
 
-    // Checklist
-    const check = document.getElementById('playerCheckList');
-    if (forceChecklist || !check.querySelector('input')){
-      check.innerHTML = '<strong>Select players:</strong><br>';
-      data.records.forEach(r=>{
+      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}/${currentNight}`, {
+        method: 'PATCH',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { status: 'in progress' } })
+      });
+
+      await new Promise(res => setTimeout(res, 800)); // small delay
+      for (const m of tempMatches) {
+        await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`, {
+          method: 'POST',
+          headers: { ...authHeader, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              night: [currentNight],
+              teamA1: [m.teamA],
+              teamB1: [m.teamB],
+              status: 'pending',
+              ts: new Date().toISOString(),
+              matchName: `${playerMap[m.teamA]} vs ${playerMap[m.teamB]}`
+            }
+          })
+        });
+        await new Promise(r => setTimeout(r, 150)); // throttle
+      }
+
+      tempMatches = [];
+      document.getElementById('nightStatusMsg').innerText = 'Night in progress!';
+      document.getElementById('confirmNightBtn').classList.add('hidden');
+      document.getElementById('endNightBtn').classList.remove('hidden');
+      document.getElementById('gameNightBox').style.display = 'none';
+      document.getElementById('resultsTable').classList.remove('hidden');
+      await loadMatches();
+    }
+
+    // ===== LOAD MATCHES =====
+    async function loadMatches() {
+      const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`, { headers: authHeader });
+      const data = await res.json();
+      const tbody = document.getElementById('matches-body');
+      tbody.innerHTML = '';
+      if (!data.records.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No matches yet.</td></tr>';
+        return;
+      }
+      data.records.forEach(r => {
         const f = r.fields;
-        const lbl = document.createElement('label');
-        lbl.innerHTML = `<input type="checkbox" class="playerCheck" value="${r.id}"> ${f.name}<br>`;
-        check.appendChild(lbl);
+        const a = [extractId(f.teamA1)].map(id => playerMap[id] || '').join(', ');
+        const b = [extractId(f.teamB1)].map(id => playerMap[id] || '').join(', ');
+        const d = f.ts ? new Date(f.ts).toLocaleDateString() : '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${d}</td><td>${a}</td><td>${b}</td>
+          <td>${f.winner || ''}</td><td>${f.winPts || 0}</td><td>${f.status || ''}</td>
+          <td>${f.status !== 'complete'
+            ? `<button onclick="recordResult('${r.id}','A')">A Wins</button>
+               <button onclick="recordResult('${r.id}','B')">B Wins</button>`
+            : '✅ Done'}</td>`;
+        tbody.appendChild(tr);
       });
     }
-  }catch(err){
-    console.error(err);
-    // Keep existing table intact
-  }
-  isLoadingPlayers = false;
-}
 
-/** ================ ADD PLAYER ================ **/
-async function addPlayer(){
-  const name = document.getElementById('playerName').value.trim();
-  if (!name) return;
-  await apiFetch(
-    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`,
-    {
-      method:'POST',
-      headers:{ ...authHeader, 'Content-Type':'application/json' },
-      body: JSON.stringify({ fields:{ name, wins:0, losses:0, points:0 } })
-    },
-    'addPlayer'
-  );
-  document.getElementById('playerName').value = '';
-  await loadPlayers(true);
-}
-
-/** ================ TEAMS ================ **/
-function generateTeams(ids){
-  const s = ids.slice().sort(()=>0.5 - Math.random());
-  const t = [];
-  for (let i=0;i<s.length;i+=2){ if (s[i+1]) t.push([s[i], s[i+1]]); }
-  return t;
-}
-
-/** ================ START NIGHT ================ **/
-async function startGameNight(){
-  const selected = [...document.querySelectorAll('.playerCheck:checked')].map(c=>c.value);
-  if (selected.length < 4 || selected.length % 2 !== 0){
-    alert('Select an even number of players (at least 4).');
-    return;
-  }
-  const date = document.getElementById('nightDate').value || new Date().toISOString().slice(0,10);
-  const teams = generateTeams(selected);
-
-  const night = await apiFetch(
-    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}`,
-    {
-      method:'POST',
-      headers:{ ...authHeader, 'Content-Type':'application/json' },
-      body: JSON.stringify({ fields:{ date, status:'planned', attendees:selected } })
-    },
-    'create night'
-  );
-  currentNight = night.id;
-  localStorage.setItem('currentNight', currentNight);
-
-  // Preview
-  tempMatches = teams.map(([a,b], i)=>({ teamA:a, teamB:b, idx:i+1 }));
-  const tbody = document.getElementById('matches-body');
-  tbody.innerHTML = tempMatches.map(m =>
-    `<tr>
-      <td>${date}</td>
-      <td>${playerMap[m.teamA]}</td>
-      <td>${playerMap[m.teamB]}</td>
-      <td colspan="3">Pending</td>
-      <td>Preview Only</td>
-    </tr>`).join('');
-
-  document.getElementById('resultsTable').classList.remove('hidden');
-  document.getElementById('nightStatusMsg').innerText = 'Night planned. Confirm to create matches.';
-  document.getElementById('confirmNightBtn').classList.remove('hidden');
-}
-
-/** ================ CONFIRM NIGHT ================ **/
-async function confirmGameNight(){
-  if (!currentNight) return alert('No planned night found.');
-  if (!tempMatches.length) return alert('No matches to confirm.');
-
-  await apiFetch(
-    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}/${currentNight}`,
-    {
-      method:'PATCH',
-      headers:{ ...authHeader, 'Content-Type':'application/json' },
-      body: JSON.stringify({ fields:{ status:'in progress' } })
-    },
-    'set night in-progress'
-  );
-  await new Promise(r=>setTimeout(r, 600)); // brief settle
-
-  // Create matches (with retry)
-  for (const m of tempMatches){
-    const r = await apiFetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`,
-      {
-        method:'POST',
-        headers:{ ...authHeader, 'Content-Type':'application/json' },
-        body: JSON.stringify({ fields:{
-          night:[currentNight],
-          teamA1:[m.teamA],
-          teamB1:[m.teamB],
-          status:'pending',
-          ts:new Date().toISOString(),
-          matchName:`${playerMap[m.teamA]} vs ${playerMap[m.teamB]}`
-        }})
-      },
-      `create match ${playerMap[m.teamA]} vs ${playerMap[m.teamB]}`
-    );
-    console.log('Created match:', r);
-    await new Promise(r=>setTimeout(r, 120)); // tiny spacing
-  }
-
-  tempMatches = [];
-  document.getElementById('nightStatusMsg').innerText = 'Night in progress!';
-  document.getElementById('confirmNightBtn').classList.add('hidden');
-  document.getElementById('endNightBtn').classList.remove('hidden');
-  document.getElementById('gameNightBox').style.display = 'none';
-  document.getElementById('resultsTable').classList.remove('hidden');
-
-  await loadMatches();
-}
-
-/** ================ LOAD MATCHES ================ **/
-async function loadMatches(){
-  const data = await apiFetch(
-    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`,
-    { headers: authHeader },
-    'loadMatches'
-  );
-  const tbody = document.getElementById('matches-body');
-  if (!data.records || !data.records.length){
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No matches yet.</td></tr>';
-    return;
-  }
-  const rows = data.records.map(r=>{
-    const f = r.fields;
-    const a = [extractId(f.teamA1)].map(id=>playerMap[id]||'').join(', ');
-    const b = [extractId(f.teamB1)].map(id=>playerMap[id]||'').join(', ');
-    const d = f.ts ? new Date(f.ts).toLocaleDateString() : '';
-    return `<tr>
-      <td>${d}</td>
-      <td>${a}</td>
-      <td>${b}</td>
-      <td>${f.winner||''}</td>
-      <td>${f.winPts||0}</td>
-      <td>${f.status||''}</td>
-      <td>${f.status!=='complete'
-        ? `<button onclick="recordResult('${r.id}','A')">A Wins</button>
-           <button onclick="recordResult('${r.id}','B')">B Wins</button>`
-        : '✅ Done'}</td>
-    </tr>`;
-  }).join('');
-  tbody.innerHTML = rows;
-}
-
-/** ================ RECORD RESULT ================ **/
-async function recordResult(matchId, winner){
-  await apiFetch(
-    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${matchId}`,
-    {
-      method:'PATCH',
-      headers:{ ...authHeader, 'Content-Type':'application/json' },
-      body: JSON.stringify({ fields:{ winner, status:'complete', winPts:1 } })
-    },
-    'recordResult'
-  );
-  await recalcFromMatches();
-  await loadMatches();
-  document.getElementById('nightStatusMsg').innerText = 'Night in progress...';
-}
-
-/** ================ END NIGHT ================ **/
-async function endGameNight(){
-  if (!currentNight) return alert('No active night.');
-  if (!confirm('End this game night?')) return;
-  await apiFetch(
-    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}/${currentNight}`,
-    {
-      method:'PATCH',
-      headers:{ ...authHeader, 'Content-Type':'application/json' },
-      body: JSON.stringify({ fields:{ status:'complete' } })
-    },
-    'end night'
-  );
-  localStorage.removeItem('currentNight');
-  currentNight = null;
-  document.getElementById('gameNightBox').style.display = 'block';
-  document.getElementById('resultsTable').classList.add('hidden');
-  document.getElementById('endNightBtn').classList.add('hidden');
-  document.getElementById('nightStatusMsg').innerText = 'Night complete.';
-  await recalcFromMatches(); // ok after end
-  await loadPlayers(true);
-}
-
-/** ================ RECALC (BATCHED) ================ **/
-async function recalcFromMatches(){
-  // Pull data
-  const [players, matches] = await Promise.all([
-    apiFetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`, { headers: authHeader }, 'recalc:players'),
-    apiFetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`, { headers: authHeader }, 'recalc:matches'),
-  ]);
-  if (!players.records || !players.records.length){
-    status('No players during recalc; skipping', true);
-    await loadPlayers();
-    return;
-  }
-  const totals = {};
-  players.records.forEach(p => totals[p.id] = { wins:0, losses:0, points:0 });
-
-  matches.records?.forEach(m=>{
-    const f = m.fields||{};
-    if (f.status === 'cancelled') return;
-    const w = (f.winner||'').toUpperCase();
-    const a1 = extractId(f.teamA1), b1 = extractId(f.teamB1);
-    const pts = Number(f.winPts||0);
-    const winners = w==='A'?[a1]: w==='B'?[b1]: [];
-    const losers  = w==='A'?[b1]: w==='B'?[a1]: [];
-    winners.forEach(id=>{ if (totals[id]){ totals[id].wins++; totals[id].points += pts; } });
-    losers.forEach(id=>{ if (totals[id]) totals[id].losses++; });
-  });
-
-  // Batch PATCH (Airtable allows arrays of records)
-  const updates = Object.entries(totals).map(([id, fields])=>({ id, fields }));
-  // chunk into batches of 10
-  const chunks = [];
-  for (let i=0;i<updates.length;i+=10) chunks.push(updates.slice(i,i+10));
-
-  for (const [idx, chunk] of chunks.entries()){
-    await apiFetch(
-      `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`,
-      {
-        method:'PATCH',
-        headers:{ ...authHeader, 'Content-Type':'application/json' },
-        body: JSON.stringify({ records: chunk })
-      },
-      `recalc batch ${idx+1}/${chunks.length}`
-    );
-    await new Promise(r=>setTimeout(r, 200)); // gentle spacing
-  }
-  await loadPlayers(true);
-}
-
-/** ================ INIT (SAFE) ================ **/
-async function init(){
-  // Always show planner if no night; don't recalc on init (less churn)
-  document.getElementById('gameNightBox').style.display = currentNight ? 'none' : 'block';
-  document.getElementById('resultsTable').classList.toggle('hidden', !currentNight);
-  document.getElementById('endNightBtn').classList.toggle('hidden', !currentNight);
-
-  await loadPlayers(true);
-
-  // If a stored night exists, validate it
-  if (currentNight){
-    try{
-      await apiFetch(
-        `https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}/${currentNight}`,
-        { headers: authHeader },
-        'validate night'
-      );
-      // Load matches view
-      await loadMatches();
+    // ===== RECORD RESULT =====
+    async function recordResult(id, winner) {
+      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${id}`, {
+        method: 'PATCH',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { winner, status: 'complete', winPts: 1 } })
+      });
+      await loadMatches(); // refresh only matches, not leaderboard
       document.getElementById('nightStatusMsg').innerText = 'Night in progress...';
-    }catch(e){
+    }
+
+    // ===== END NIGHT (Recalculate leaderboard here) =====
+    async function endGameNight() {
+      if (!currentNight) return alert('No active night.');
+      if (!confirm('End this game night?')) return;
+
+      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}/${currentNight}`, {
+        method: 'PATCH',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { status: 'complete' } })
+      });
+
+      // Recalculate leaderboard only now
+      await recalcFromMatches();
+
       localStorage.removeItem('currentNight');
       currentNight = null;
       document.getElementById('gameNightBox').style.display = 'block';
       document.getElementById('resultsTable').classList.add('hidden');
       document.getElementById('endNightBtn').classList.add('hidden');
-      status('Stored night was invalid; reset to planner', true);
+      document.getElementById('nightStatusMsg').innerText = 'Night complete.';
+      await loadPlayers(true);
     }
-  }
-}
-init();
-</script>
+
+    // ===== RECALC LEADERBOARD =====
+    async function recalcFromMatches() {
+      const [playersRes, matchesRes] = await Promise.all([
+        fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`, { headers: authHeader }),
+        fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`, { headers: authHeader })
+      ]);
+      const players = await playersRes.json();
+      const matches = await matchesRes.json();
+      if (!players.records?.length) return;
+
+      const totals = {};
+      players.records.forEach(p => totals[p.id] = { wins: 0, losses: 0, points: 0 });
+
+      matches.records.forEach(m => {
+        const f = m.fields || {};
+        if (f.status === 'cancelled') return;
+        const w = (f.winner || '').toUpperCase();
+        const a1 = extractId(f.teamA1), b1 = extractId(f.teamB1);
+        const pts = Number(f.winPts || 0);
+        const winners = w === 'A' ? [a1] : w === 'B' ? [b1] : [];
+        const losers = w === 'A' ? [b1] : w === 'B' ? [a1] : [];
+        winners.forEach(id => { if (totals[id]) { totals[id].wins++; totals[id].points += pts; } });
+        losers.forEach(id => { if (totals[id]) totals[id].losses++; });
+      });
+
+      for (const [id, t] of Object.entries(totals)) {
+        await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}/${id}`, {
+          method: 'PATCH',
+          headers: { ...authHeader, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: t })
+        });
+        await new Promise(r => setTimeout(r, 200)); // avoid rate limits
+      }
+    }
+
+    // ===== INIT =====
+    async function init() {
+      await loadPlayers(true);
+      await loadMatches();
+
+      if (currentNight) {
+        document.getElementById('gameNightBox').style.display = 'none';
+        document.getElementById('resultsTable').classList.remove('hidden');
+        document.getElementById('endNightBtn').classList.remove('hidden');
+      } else {
+        document.getElementById('gameNightBox').style.display = 'block';
+        document.getElementById('resultsTable').classList.add('hidden');
+      }
+    }
+
+    init();
+  </script>
 </body>
 </html>
