@@ -151,10 +151,16 @@
         <p>Status: <span style="background:#ffc107;color:#222;padding:4px 10px;border-radius:6px;">In Progress</span></p>`;
 
       // Filter matches linked to this night
-      const matches = matchData.records.filter(m => {
-        const linked = m.fields.nights || [];
-        return linked.includes(night.id);
-      });
+     const matches = matchData.records.filter(m => {
+      const linked = m.fields.nights || [];
+      return linked.some(v =>
+        typeof v === 'string'
+          ? v === night.id
+          : v.id === night.id
+      );
+    });
+console.log("DEBUG: Found matches for night", night.id, "→", matches.length);
+
 
       if(!matches.length){
         matchDiv.innerHTML='<p>No matches found for this night.</p>';
