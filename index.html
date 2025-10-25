@@ -217,88 +217,92 @@
       return rounds;
     }
 
-   // ===== START GAME NIGHT =====
+ // ===== START GAME NIGHT =====
 async function startGameNight() {
+  // 1️⃣ Collect selected players
   const selected = [...document.querySelectorAll('.playerCheck:checked')].map(c => c.value);
-  if (selected.length < 4) return alert('Select at least 4 players');
+  if (selected.length < 4) {
+    alert('Select at least 4 players');
+    return;
+  }
 
+  // 2️⃣ Get date for the night (from input or today)
   const date = document.getElementById('nightDate').value || new Date().toISOString().slice(0, 10);
 
+  // 3️⃣ Create the night record in Airtable
   const nightRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}`, {
     method: 'POST',
     headers: { ...authHeader, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      fields: { date, status: 'in progress', attendees: selected }
+      fields: {
+        date,
+        status: 'in progress',
+        attendees: selected   // array of player record IDs
+      }
     })
   });
 
   const night = await nightRes.json();
   currentNight = night.id;
 
+  console.log("DEBUG: Created night record", night);
+
   document.getElementById('nightStatusMsg').innerText = 'Game night started!';
   document.getElementById('endNightBtn').classList.remove('hidden');
 
-  console.log("DEBUG: Created night record", night.id);
-
+  // 4️⃣ Generate round robin pairings
   const rounds = generateRoundRobin(selected);
+  console.log("DEBUG: Generated rounds", rounds.length, rounds);
 
+  // 5️⃣ Post each generated match to Airtable
   for (const round of rounds) {
     for (const [p1, p2] of round) {
 
+      // --- build the record body
       const matchBody = {
         fields: {
           ts: new Date().toISOString(),
-          nights: [String(night.id)],  // ✅ must be an array of strings
-          teamA1: [p1],
-          teamB1: [p2],
-          winner: '',
-          winPts: 1,
-          status: 'pending'
-        }
-      };
+          nights: [String(night.id)],     // ✅ link to this night's record
 
-      console.log("DEBUG: Linking to night ID", night.id, matchBody);
-
-      const matchRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`, {
-        method: 'POST',
-        headers: { ...authHeader, 'Content-Type': 'application/json' },
-        body: JSON.stringify(matchBody)
-      });
-
-      console.log("DEBUG: Match POST result", matchRes.status, await matchRes.text());
-      console.log(`DEBUG: Created match ${playerMap[p1]} vs ${playerMap[p2]}`);
-    }
-  }
-
-  await loadMatches();
-}
 
     // ===== END GAME NIGHT =====
-    async function endCurrentNight(){
-      if(!currentNight) return;
-      // mark night complete
-      await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}/${currentNight}`,{
-        method:'PATCH',headers:{...authHeader,'Content-Type':'application/json'},
-        body:JSON.stringify({fields:{status:'complete'}})
-      });
+async function endGameNight() {
+  if (!currentNight) {
+    alert("No active game night to end.");
+    return;
+  }
 
-      // cancel unplayed matches
-      const res=await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?filterByFormula=${encodeURIComponent(`AND({night}='${currentNight}',{status}='pending')`)}`,{headers:authHeader});
-      const data=await res.json();
-      for(const r of data.records){
-        await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${r.id}`,{
-          method:'PATCH',headers:{...authHeader,'Content-Type':'application/json'},
-          body:JSON.stringify({fields:{status:'cancelled'}})
-        });
-        console.log(`DEBUG: Cancelled match ${r.id}`);
-      }
+  const confirmEnd = confirm("Are you sure you want to end this game night?");
+  if (!confirmEnd) return;
 
-      document.getElementById('nightStatusMsg').innerText='Night ended.';
-      document.getElementById('endNightBtn').classList.add('hidden');
-      currentNight=null;
-      await recalcFromMatches();
-      await loadMatches();
-    }
+  console.log("DEBUG: Ending night", currentNight);
+
+  // 1️⃣ Mark the night as complete
+  const nightUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}/${currentNight}`;
+  const nightBody = {
+    fields: { status: "complete" }
+  };
+
+  const nightRes = await fetch(nightUrl, {
+    method: "PATCH",
+    headers: { ...authHeader, "Content-Type": "application/json" },
+    body: JSON.stringify(nightBody)
+  });
+
+  const nightText = await nightRes.text();
+  console.log("DEBUG: Updated night status → complete", nightRes.status, nightText);
+
+  // 2️⃣ Find any matches still marked as "pending" and cancel them
+  const filter = encodeURIComponent(`AND(status='pending',ARRAYJOIN(nights)='${currentNight}')`);
+  const matchesUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?filterByFormula=${filter}`;
+  const res = await fetch(matchesUrl, { headers: authHeader });
+  const data = await res.json();
+
+  console.log(`DEBUG: Found ${data.records?.length || 0} pending matches to cancel`);
+
+  if (data.records && data.records.length > 0) {
+    for (const rec of data.records) {
+      const cancelUrl = `https://api.airtable.com
 
     // ===== RECALC IGNORING CANCELLED =====
     async function recalcFromMatches(){
