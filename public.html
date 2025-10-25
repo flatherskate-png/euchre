@@ -14,71 +14,39 @@
       text-align: center;
       overflow-x: hidden;
     }
-
     h1 {
       font-size: 2.5rem;
       margin-bottom: 1rem;
       color: #e4f2d4;
       text-shadow: 0 0 10px #44ff9a;
     }
-
     .section {
       margin: 2rem auto;
-      max-width: 800px;
-      background: rgba(255,255,255,0.1);
+      max-width: 900px;
+      background: rgba(255,255,255,0.08);
       border-radius: 20px;
       padding: 1.5rem;
       box-shadow: 0 0 20px rgba(0,0,0,0.3);
     }
-
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      border-radius: 12px;
-      overflow: hidden;
-      background: rgba(255,255,255,0.15);
-      backdrop-filter: blur(6px);
+    .match-grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 1rem;
     }
-
-    th, td {
-      padding: 0.75rem;
-      border-bottom: 1px solid rgba(255,255,255,0.2);
-    }
-
-    th {
-      background: rgba(255,255,255,0.2);
-      color: #e4f2d4;
-    }
-
-    tr:hover {
-      background: rgba(255,255,255,0.1);
-    }
-
-    .status-tag {
-      padding: 0.25rem 0.6rem;
-      border-radius: 6px;
-      font-size: 0.85rem;
-      font-weight: bold;
-      display: inline-block;
-    }
-
-    .status-complete { background: #4caf50; }
-    .status-pending { background: #ffc107; color: #222; }
-    .status-cancelled { background: #f44336; }
-
     .match-card {
-      display: inline-block;
       background: #1c3c2f;
-      color: white;
       border-radius: 16px;
       padding: 1rem 1.2rem;
-      margin: 0.5rem;
-      min-width: 180px;
-      box-shadow: 0 0 15px rgba(0,0,0,0.4);
-      transition: transform 0.2s;
+      min-width: 200px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.4);
+      border: 2px solid #44ff9a;
+      transition: transform 0.25s, box-shadow 0.25s;
     }
-    .match-card:hover { transform: scale(1.05); }
-
+    .match-card:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 25px rgba(0,255,200,0.6);
+    }
     .team-name {
       font-size: 1.1rem;
       font-weight: bold;
@@ -88,14 +56,29 @@
       font-size: 0.9rem;
       opacity: 0.8;
     }
-
-    .team-color {
-      border-radius: 10px;
-      padding: 0.3rem 0.6rem;
-      font-weight: 600;
-      color: #222;
+    .status {
+      margin-top: 0.4rem;
+      font-size: 0.9rem;
     }
-
+    .leaderboard table {
+      border-collapse: collapse;
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(6px);
+    }
+    th, td {
+      padding: 0.75rem;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+    }
+    th {
+      background: rgba(255,255,255,0.2);
+      color: #e4f2d4;
+    }
+    tr:hover {
+      background: rgba(255,255,255,0.1);
+    }
     footer {
       margin-top: 2rem;
       font-size: 0.8rem;
@@ -109,96 +92,105 @@
   <div id="night-status" class="section">Loading game info...</div>
   <div id="matches" class="section"></div>
 
-  <div class="section">
+  <div class="section leaderboard">
     <h2>🏆 Leaderboard</h2>
     <table id="leaderboard">
-      <thead>
-        <tr><th>Player</th><th>Wins</th><th>Losses</th><th>Points</th></tr>
-      </thead>
-      <tbody id="leaderboard-body">
-        <tr><td colspan="4">Loading...</td></tr>
-      </tbody>
+      <thead><tr><th>Player</th><th>Wins</th><th>Losses</th><th>Points</th></tr></thead>
+      <tbody id="leaderboard-body"><tr><td colspan="4">Loading...</td></tr></tbody>
     </table>
   </div>
 
   <footer>💚 Euchre Club • Updated live from Airtable</footer>
 
   <script>
-    // CONFIG
-    const AIRTABLE_TOKEN = 'patp2kWXmK7Vc5SXF.e60aa4c97a0f1b03640614a30e154f0047d14829803c841dee4ca1cdf828594d';
-    const AIRTABLE_BASE = 'appiiakeJWvHtrd2h';
-    const PLAYERS_TABLE = 'players';
-    const MATCHES_TABLE = 'matches';
-    const NIGHTS_TABLE = 'nights';
+    const AIRTABLE_TOKEN = 'YOUR_READ_ONLY_TOKEN';
+    const AIRTABLE_BASE  = 'appiiakeJWvHtrd2h';
+    const PLAYERS_TABLE  = 'players';
+    const MATCHES_TABLE  = 'matches';
+    const NIGHTS_TABLE   = 'nights';
     const authHeader = { Authorization: `Bearer ${AIRTABLE_TOKEN}` };
 
-    const COLORS = ["red","orange","yellow","green","blue","purple","pink","black","white"];
+    const COLORS = ['#ff4d4d','#ffa94d','#ffee58','#4caf50','#2196f3','#9c27b0','#ff80ab','#333','#fff'];
 
-    async function fetchTable(table, params='') {
-      const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}${params}`, { headers: authHeader });
+    async function fetchTable(table) {
+      const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}`, { headers: authHeader });
       return res.json();
     }
 
     async function loadLeaderboard() {
-      const data = await fetchTable(PLAYERS_TABLE, '?sort[0][field]=points&sort[0][direction]=desc');
+      const data = await fetchTable(PLAYERS_TABLE);
       const tbody = document.getElementById('leaderboard-body');
       tbody.innerHTML = '';
-      data.records.forEach(r => {
-        const f = r.fields;
-        const row = `<tr><td>${f.name||''}</td><td>${f.wins||0}</td><td>${f.losses||0}</td><td>${f.points||0}</td></tr>`;
-        tbody.insertAdjacentHTML('beforeend', row);
-      });
+      data.records.sort((a,b)=>(b.fields.points||0)-(a.fields.points||0))
+        .forEach(r=>{
+          const f=r.fields;
+          tbody.insertAdjacentHTML('beforeend',
+            `<tr><td>${f.name||''}</td><td>${f.wins||0}</td><td>${f.losses||0}</td><td>${f.points||0}</td></tr>`);
+        });
     }
 
     async function loadGameNight() {
-      const data = await fetchTable(NIGHTS_TABLE, `?filterByFormula=${encodeURIComponent("{status}='in progress'")}`);
-      const div = document.getElementById('night-status');
+      const nightData = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}?filterByFormula=${encodeURIComponent("{status}='in progress'")}`, { headers: authHeader }).then(r=>r.json());
+      const matchData = await fetchTable(MATCHES_TABLE);
+      const playerData = await fetchTable(PLAYERS_TABLE);
+
+      const playerMap = {};
+      playerData.records.forEach(p=>playerMap[p.id]=p.fields.name);
+
+      const nightStatus = document.getElementById('night-status');
       const matchDiv = document.getElementById('matches');
 
-      if (!data.records.length) {
-        div.innerHTML = "<h2>No Game Night in progress 🎲</h2><p>Enjoy the leaderboard below!</p>";
-        matchDiv.innerHTML = '';
+      if(!nightData.records.length){
+        nightStatus.innerHTML="<h2>No Game Night in progress 🎲</h2><p>Enjoy the leaderboard below!</p>";
+        matchDiv.innerHTML='';
         return;
       }
 
-      const night = data.records[0];
-      div.innerHTML = `<h2>🎮 Game Night: ${night.fields.date || 'Today'}</h2><p>Status: <span class="status-tag status-pending">In Progress</span></p>`;
+      const night = nightData.records[0];
+      nightStatus.innerHTML = `<h2>🎮 Game Night: ${night.fields.date||'Today'}</h2>
+        <p>Status: <span style="background:#ffc107;color:#222;padding:4px 10px;border-radius:6px;">In Progress</span></p>`;
 
-      // load matches for this night
-      const filter = encodeURIComponent(`ARRAYJOIN(nights)='${night.id}'`);
-      const matches = await fetchTable(MATCHES_TABLE, `?filterByFormula=${filter}`);
+      // Filter matches linked to this night
+      const matches = matchData.records.filter(m => {
+        const linked = m.fields.nights || [];
+        return linked.includes(night.id);
+      });
 
-      if (!matches.records.length) {
-        matchDiv.innerHTML = '<p>No matches yet!</p>';
+      if(!matches.length){
+        matchDiv.innerHTML='<p>No matches found for this night.</p>';
         return;
       }
 
-      matchDiv.innerHTML = '<h2>🔥 Live Matches</h2>';
-      matches.records.forEach((m,i) => {
-        const f = m.fields;
-        const teamA = [f.teamA1_name, f.teamA2_name].filter(Boolean).join(' & ') || "Team A";
-        const teamB = [f.teamB1_name, f.teamB2_name].filter(Boolean).join(' & ') || "Team B";
-        const color = COLORS[i % COLORS.length];
-        const winner = f.status === 'complete' ? (f.winner || '—') : '⏳';
+      matchDiv.innerHTML='<h2>🔥 Matchups</h2><div class="match-grid"></div>';
+      const grid=document.querySelector('.match-grid');
 
-        matchDiv.innerHTML += `
-          <div class="match-card" style="border:2px solid ${color};">
-            <div class="team-name"><span class="team-color" style="background:${color};">${teamA}</span></div>
+      matches.forEach((m,i)=>{
+        const f=m.fields;
+        const color=COLORS[i%COLORS.length];
+        const teamA=[f.teamA1,f.teamA2].map(id=>playerMap[id]||'').filter(Boolean).join(' & ')||'Team A';
+        const teamB=[f.teamB1,f.teamB2].map(id=>playerMap[id]||'').filter(Boolean).join(' & ')||'Team B';
+        const status=f.status||'pending';
+        const winner=f.winner||'⏳';
+        const glow=status==='complete'?'0 0 20px '+color:'0 0 10px rgba(0,0,0,0.5)';
+
+        grid.insertAdjacentHTML('beforeend',`
+          <div class="match-card" style="border-color:${color};box-shadow:${glow};">
+            <div class="team-name" style="color:${color};">${teamA}</div>
             <div class="vs">vs</div>
-            <div class="team-name"><span class="team-color" style="background:${color};">${teamB}</span></div>
-            <div style="margin-top:0.5rem;font-size:0.9rem;">Result: ${winner}</div>
+            <div class="team-name" style="color:${color};">${teamB}</div>
+            <div class="status">${status==='complete'?'🏁 Winner: '+winner:'⏳ '+status}</div>
           </div>
-        `;
+        `);
       });
     }
 
-    async function refresh() {
+    async function refresh(){
       await loadGameNight();
       await loadLeaderboard();
     }
 
     refresh();
-    setInterval(refresh, 30000); // auto-refresh every 30s
+    setInterval(refresh,30000);
   </script>
 </body>
 </html>
