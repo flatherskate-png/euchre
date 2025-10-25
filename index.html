@@ -89,7 +89,25 @@
     <h3>Planned Teams & Matchups</h3>
     <div id="plannedMatches"></div>
   </div>
-
+  
+<div class="form-box" id="matchesBox">
+  <h3>Match Results</h3>
+  <table id="matchesTable">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Match</th>
+        <th>Status</th>
+        <th>Winner</th>
+        <th>Record Result</th>
+      </tr>
+    </thead>
+    <tbody id="matchesBody">
+      <tr><td colspan="5" style="text-align:center;">Loading...</td></tr>
+    </tbody>
+  </table>
+</div>
+  
   <hr>
 
   <h2>Leaderboard</h2>
@@ -275,6 +293,65 @@
       currentNight=null;
       plannedTeams=[];
     }
+    
+// === LOAD MATCHES AND ALLOW WINNER SELECTION ===
+async function loadMatches() {
+  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}?sort[0][field]=ts&sort[0][direction]=desc`;
+  const res = await fetch(url, { headers: authHeader });
+  const data = await res.json();
+
+  const tbody = document.getElementById('matchesBody');
+  tbody.innerHTML = '';
+
+  if (!data.records?.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No matches found.</td></tr>';
+    return;
+  }
+
+  for (const rec of data.records) {
+    const f = rec.fields;
+    const dateStr = f.ts ? new Date(f.ts).toLocaleDateString() : '';
+    const teamA = [f.teamA1, f.teamA2].map(id => playerMap[id?.[0]]).filter(Boolean).join(' & ');
+    const teamB = [f.teamB1, f.teamB2].map(id => playerMap[id?.[0]]).filter(Boolean).join(' & ');
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${dateStr}</td>
+      <td>${f.teamNames || `${teamA} vs ${teamB}`}</td>
+      <td>${f.status || 'pending'}</td>
+      <td>${f.winner || ''}</td>
+      <td>
+        <button class="btnA" onclick="recordResult('${rec.id}', 'A')">Team A</button>
+        <button class="btnB" onclick="recordResult('${rec.id}', 'B')">Team B</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+// === RECORD RESULT ===
+async function recordResult(matchId, winner) {
+  try {
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${matchId}`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { ...authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { winner, status: 'complete' } })
+    });
+
+    const text = await res.text();
+    console.log(`✅ Updated ${matchId} with winner ${winner}`, res.status, text);
+
+    await recalcFromMatches();
+    await loadMatches();
+  } catch (err) {
+    console.error('❌ Error recording result', err);
+    alert('Failed to update match result.');
+  }
+}
+
+// Automatically load matches when the admin page starts
+loadMatches();
 
     loadPlayers();
   </script>
