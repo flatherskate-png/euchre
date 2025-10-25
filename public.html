@@ -113,14 +113,24 @@
     const COLORS = ['#ff4d4d','#ffa94d','#ffee58','#4caf50','#2196f3','#9c27b0','#ff80ab','#333','#fff'];
 
     async function fetchTable(table) {
-      const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}`, { headers: authHeader });
-      return res.json();
+      try {
+        const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${table}`, { headers: authHeader });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        console.error(`Error fetching ${table}:`, err);
+        return { records: [] };
+      }
     }
 
     async function loadLeaderboard() {
       const data = await fetchTable(PLAYERS_TABLE);
       const tbody = document.getElementById('leaderboard-body');
       tbody.innerHTML = '';
+      if (!data.records?.length) {
+        tbody.innerHTML = '<tr><td colspan="4">No players found</td></tr>';
+        return;
+      }
       data.records.sort((a,b)=>(b.fields.points||0)-(a.fields.points||0))
         .forEach(r=>{
           const f=r.fields;
@@ -135,68 +145,67 @@
       const playerData = await fetchTable(PLAYERS_TABLE);
 
       const playerMap = {};
-      playerData.records.forEach(p=>playerMap[p.id]=p.fields.name);
+      (playerData.records || []).forEach(p => playerMap[p.id] = p.fields.name);
+      console.log("DEBUG: Players loaded:", Object.keys(playerMap).length);
 
       const nightStatus = document.getElementById('night-status');
       const matchDiv = document.getElementById('matches');
 
-      if(!nightData.records.length){
-        nightStatus.innerHTML="<h2>No Game Night in progress 🎲</h2><p>Enjoy the leaderboard below!</p>";
-        matchDiv.innerHTML='';
+      if (!nightData.records?.length) {
+        nightStatus.innerHTML = "<h2>No Game Night in progress 🎲</h2><p>Enjoy the leaderboard below!</p>";
+        matchDiv.innerHTML = '';
         return;
       }
 
       const night = nightData.records[0];
-      nightStatus.innerHTML = `<h2>🎮 Game Night: ${night.fields.date||'Today'}</h2>
+      nightStatus.innerHTML = `<h2>🎮 Game Night: ${night.fields.date || 'Today'}</h2>
         <p>Status: <span style="background:#ffc107;color:#222;padding:4px 10px;border-radius:6px;">In Progress</span></p>`;
 
-      // Filter matches linked to this night
-     const matches = matchData.records.filter(m => {
-      const linked = m.fields.nights || [];
-      return linked.some(v =>
-        typeof v === 'string'
-          ? v === night.id
-          : v.id === night.id
-      );
-    });
-console.log("DEBUG: Found matches for night", night.id, "→", matches.length);
+      const matches = (matchData.records || []).filter(m => {
+        const linked = m.fields.nights || [];
+        return linked.some(v =>
+          typeof v === 'string'
+            ? v === night.id
+            : v.id === night.id
+        );
+      });
+      console.log("DEBUG: Found matches for night", night.id, "→", matches.length);
 
-
-      if(!matches.length){
-        matchDiv.innerHTML='<p>No matches found for this night.</p>';
+      if (!matches.length) {
+        matchDiv.innerHTML = '<p>No matches found for this night.</p>';
         return;
       }
 
-      matchDiv.innerHTML='<h2>🔥 Matchups</h2><div class="match-grid"></div>';
-      const grid=document.querySelector('.match-grid');
+      matchDiv.innerHTML = '<h2>🔥 Matchups</h2><div class="match-grid"></div>';
+      const grid = document.querySelector('.match-grid');
 
-      matches.forEach((m,i)=>{
-        const f=m.fields;
-        const color=COLORS[i%COLORS.length];
-        const teamA=[f.teamA1,f.teamA2].map(id=>playerMap[id]||'').filter(Boolean).join(' & ')||'Team A';
-        const teamB=[f.teamB1,f.teamB2].map(id=>playerMap[id]||'').filter(Boolean).join(' & ')||'Team B';
-        const status=f.status||'pending';
-        const winner=f.winner||'⏳';
-        const glow=status==='complete'?'0 0 20px '+color:'0 0 10px rgba(0,0,0,0.5)';
+      matches.forEach((m, i) => {
+        const f = m.fields || {};
+        const color = COLORS[i % COLORS.length];
+        const teamA = [f.teamA1, f.teamA2].map(id => playerMap[id] || '').filter(Boolean).join(' & ') || 'Team A';
+        const teamB = [f.teamB1, f.teamB2].map(id => playerMap[id] || '').filter(Boolean).join(' & ') || 'Team B';
+        const status = f.status || 'pending';
+        const winner = f.winner || '⏳';
+        const glow = status === 'complete' ? `0 0 20px ${color}` : `0 0 10px rgba(0,0,0,0.5)`;
 
-        grid.insertAdjacentHTML('beforeend',`
+        grid.insertAdjacentHTML('beforeend', `
           <div class="match-card" style="border-color:${color};box-shadow:${glow};">
             <div class="team-name" style="color:${color};">${teamA}</div>
             <div class="vs">vs</div>
             <div class="team-name" style="color:${color};">${teamB}</div>
-            <div class="status">${status==='complete'?'🏁 Winner: '+winner:'⏳ '+status}</div>
+            <div class="status">${status === 'complete' ? '🏁 Winner: ' + winner : '⏳ ' + status}</div>
           </div>
         `);
       });
     }
 
-    async function refresh(){
+    async function refresh() {
       await loadGameNight();
       await loadLeaderboard();
     }
 
     refresh();
-    setInterval(refresh,30000);
+    setInterval(refresh, 30000);
   </script>
 </body>
 </html>
