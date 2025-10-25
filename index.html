@@ -106,7 +106,7 @@
   <table id="matches">
     <thead>
       <tr>
-        <th>Date</th><th>Team A</th><th>Team B</th><th>Winner</th><th>Points</th><th>Status</th>
+        <th>Date</th><th>Team A</th><th>Team B</th><th>Winner</th><th>Points</th><th>Status</th><th>Actions</th>
       </tr>
     </thead>
     <tbody id="matches-body">
@@ -232,15 +232,39 @@ function roundRobinTeams(teams){
       if(!data.records.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;">No matches yet.</td></tr>';return;}
 
       for(const r of data.records){
-        const f=r.fields;
-        if(!showCancelled && f.status==='cancelled') continue;
-        const a=[extractId(f.teamA1),extractId(f.teamA2)].map(id=>playerMap[id]||'').filter(Boolean).join(', ');
-        const b=[extractId(f.teamB1),extractId(f.teamB2)].map(id=>playerMap[id]||'').filter(Boolean).join(', ');
-        const dateStr=f.ts?new Date(f.ts).toLocaleDateString():'';
-        const tr=document.createElement('tr');
-        if(f.status==='cancelled') tr.style.opacity=0.5;
-        tr.innerHTML=`<td>${dateStr}</td><td>${a}</td><td>${b}</td><td>${f.winner||''}</td><td>${f.winPts||0}</td><td>${f.status||''}</td>`;
+        const f = r.fields;
+        if (!showCancelled && f.status === 'cancelled') continue;
+        
+        const teamA = [extractId(f.teamA1), extractId(f.teamA2)]
+          .map(id => playerMap[id] || '')
+          .filter(Boolean).join(', ');
+        const teamB = [extractId(f.teamB1), extractId(f.teamB2)]
+          .map(id => playerMap[id] || '')
+          .filter(Boolean).join(', ');
+        const dateStr = f.ts ? new Date(f.ts).toLocaleDateString() : '';
+        
+        const tr = document.createElement('tr');
+        if (f.status === 'cancelled') tr.style.opacity = 0.5;
+        
+        let actions = '';
+        if (f.status === 'pending') {
+          actions = `
+            <button onclick="recordMatchResult('${r.id}', 'A')">A Wins</button>
+            <button onclick="recordMatchResult('${r.id}', 'B')">B Wins</button>
+          `;
+        }
+        
+        tr.innerHTML = `
+          <td>${dateStr}</td>
+          <td>${teamA}</td>
+          <td>${teamB}</td>
+          <td>${f.winner || ''}</td>
+          <td>${f.winPts || 0}</td>
+          <td>${f.status || ''}</td>
+          <td>${actions}</td>
+        `;
         tbody.appendChild(tr);
+
       }
     }
     function toggleCancelled(){
@@ -427,6 +451,31 @@ async function startGameNight() {
     previewDiv.remove();
     alert('Matches created and schedule posted!');
   };
+}
+
+    // ===== RECORD MATCH RESULT =====
+async function recordMatchResult(matchId, winner) {
+  if (!winner) return;
+  console.log(`DEBUG: Recording result for ${matchId}, winner = ${winner}`);
+
+  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${matchId}`;
+  const body = {
+    fields: {
+      winner: winner.toUpperCase(),
+      status: 'complete'
+    }
+  };
+
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { ...authHeader, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  console.log('DEBUG: Record result response', res.status, await res.text());
+
+  await recalcFromMatches();
+  await loadMatches();
 }
 
 
