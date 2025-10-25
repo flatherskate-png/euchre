@@ -333,7 +333,7 @@ async function endGameNight() {
     });
 
     console.log("DEBUG: Cancelled match", rec.id, cancelRes.status);
-  }
+  } // ✅ closes for-loop
 
   // 3️⃣ Refresh and reset
   await recalcFromMatches();
@@ -345,7 +345,6 @@ async function endGameNight() {
 
   alert("Game night closed. Pending matches marked as cancelled.");
 } // ✅ closes endGameNight()
-
 
 
     // ===== RECALC IGNORING CANCELLED =====
