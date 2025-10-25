@@ -129,6 +129,57 @@
     const authHeader = { Authorization: `Bearer ${AIRTABLE_TOKEN}` };
     const extractId = val => Array.isArray(val) ? val[0] : val;
 
+    // ---- TEAM HELPERS ----
+function shuffle(arr){
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Make random teams of 2 from selected player IDs
+// Returns { teams: [[p1,p2], ...], bench: null|playerId }
+function makeRandomTeams(playerIds){
+  const s = shuffle(playerIds);
+  const teams = [];
+  for (let i = 0; i + 1 < s.length; i += 2) {
+    teams.push([s[i], s[i+1]]);
+  }
+  const bench = (s.length % 2 === 1) ? s[s.length - 1] : null;
+  return { teams, bench };
+}
+
+// Round robin over team indexes (0..T-1). Supports BYE if odd team count.
+function roundRobinTeams(teams){
+  const nTeams = teams.length;
+  let names = Array.from({length: nTeams}, (_, i) => i);
+  let bye = null;
+  if (nTeams % 2 === 1) {
+    bye = 'BYE';
+    names.push(bye);
+  }
+  const n = names.length;
+  const half = n / 2;
+  const rounds = [];
+  let arr = names.slice();
+
+  for (let r = 0; r < n - 1; r++){
+    const matches = [];
+    for (let i = 0; i < half; i++){
+      const a = arr[i], b = arr[n - 1 - i];
+      if (a === bye || b === bye) continue;  // skip BYE
+      matches.push([a, b]); // a & b are team indexes
+    }
+    rounds.push(matches);
+    // rotate while keeping first fixed (circle method)
+    arr = [arr[0]].concat([arr[n-1]]).concat(arr.slice(1, n-1));
+  }
+  return rounds; // e.g. [ [ [0,1],[2,3] ], [ [0,2],[1,3] ], ... ]
+}
+
+
     // ===== LOAD PLAYERS =====
     async function loadPlayers() {
       const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`, { headers: authHeader });
@@ -217,16 +268,17 @@
       return rounds;
     }
 
-    // ===== START GAME NIGHT =====
+ // ===== START GAME NIGHT =====
 async function startGameNight() {
   const selected = [...document.querySelectorAll('.playerCheck:checked')].map(c => c.value);
   if (selected.length < 4) {
-    alert('Select at least 4 players');
+    alert('Select at least 4 players (minimum 2 teams).');
     return;
   }
 
   const date = document.getElementById('nightDate').value || new Date().toISOString().slice(0, 10);
 
+  // 1️⃣ Create the game night record
   const nightRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}`, {
     method: 'POST',
     headers: { ...authHeader, 'Content-Type': 'application/json' },
@@ -241,30 +293,90 @@ async function startGameNight() {
 
   const night = await nightRes.json();
   currentNight = night.id;
-
-  console.log("DEBUG: Created night record", night);
+  console.log('DEBUG: Created night record', night);
 
   document.getElementById('nightStatusMsg').innerText = 'Game night started!';
   document.getElementById('endNightBtn').classList.remove('hidden');
 
-  const rounds = generateRoundRobin(selected);
-  console.log("DEBUG: Generated rounds", rounds.length, rounds);
+  // 2️⃣ Randomize teams of two
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
 
+  const shuffled = shuffle(selected);
+  const teams = [];
+  for (let i = 0; i + 1 < shuffled.length; i += 2) {
+    teams.push([shuffled[i], shuffled[i + 1]]);
+  }
+  const bench = shuffled.length % 2 === 1 ? shuffled[shuffled.length - 1] : null;
+
+  console.log('DEBUG: Teams generated', teams.map(t => t.map(id => playerMap[id])));
+  if (bench) console.log('DEBUG: Bench player:', bench, playerMap[bench] || bench);
+
+  if (teams.length < 2) {
+    alert('Not enough teams to schedule matches.');
+    return;
+  }
+
+  // 3️⃣ Generate a round-robin schedule between teams
+  function roundRobinTeams(teams) {
+    const nTeams = teams.length;
+    let names = Array.from({ length: nTeams }, (_, i) => i);
+    let bye = null;
+    if (nTeams % 2 === 1) {
+      bye = 'BYE';
+      names.push(bye);
+    }
+    const n = names.length;
+    const half = n / 2;
+    const rounds = [];
+    let arr = names.slice();
+    for (let r = 0; r < n - 1; r++) {
+      const matches = [];
+      for (let i = 0; i < half; i++) {
+        const a = arr[i],
+          b = arr[n - 1 - i];
+        if (a === bye || b === bye) continue;
+        matches.push([a, b]); // team indexes
+      }
+      rounds.push(matches);
+      arr = [arr[0]].concat([arr[n - 1]]).concat(arr.slice(1, n - 1));
+    }
+    return rounds;
+  }
+
+  const rounds = roundRobinTeams(teams);
+  console.log('DEBUG: Round-robin rounds generated', rounds);
+
+  // 4️⃣ Create Airtable match records
   for (const round of rounds) {
-    for (const [p1, p2] of round) {
+    for (const [ti, tj] of round) {
+      const [a1, a2] = teams[ti];
+      const [b1, b2] = teams[tj];
+
       const matchBody = {
         fields: {
           ts: new Date().toISOString(),
           nights: [String(night.id)],
-          teamA1: [p1],
-          teamB1: [p2],
+          teamA1: [a1],
+          teamA2: [a2],
+          teamB1: [b1],
+          teamB2: [b2],
           winner: '',
           winPts: 1,
           status: 'pending'
         }
       };
 
-      console.log("DEBUG: Linking to night ID", night?.id, typeof night?.id, matchBody);
+      console.log(
+        'DEBUG: Creating match',
+        `${playerMap[a1]} & ${playerMap[a2]} vs ${playerMap[b1]} & ${playerMap[b2]}`
+      );
 
       const matchRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`, {
         method: 'POST',
@@ -272,14 +384,13 @@ async function startGameNight() {
         body: JSON.stringify(matchBody)
       });
 
-      const resultText = await matchRes.text();
-      console.log("DEBUG: Match POST result", matchRes.status, resultText);
-      console.log(`DEBUG: Created match ${playerMap[p1]} vs ${playerMap[p2]}`);
+      console.log('DEBUG: Match POST result', matchRes.status, await matchRes.text());
     }
   }
 
+  // 5️⃣ Refresh match table
   await loadMatches();
-}  // ✅ make sure this closing brace exists
+}
 
 
 // ===== END GAME NIGHT =====
