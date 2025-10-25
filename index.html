@@ -122,11 +122,19 @@
     const extractId = v => Array.isArray(v) ? v[0] : v;
 
     async function loadPlayers() {
-      const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`, { headers: authHeader });
-      const data = await res.json();
-      const tbody = document.getElementById('leaderboard-body');
-      tbody.innerHTML = '';
-      playerMap = {};
+  const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`, { headers: authHeader });
+  const data = await res.json();
+
+  // ✅ if Airtable hiccups, keep old leaderboard instead of clearing it
+  if (!data.records || !Array.isArray(data.records) || !data.records.length) {
+    console.warn("⚠️ No players returned from Airtable — keeping existing leaderboard");
+    return;
+  }
+
+  const tbody = document.getElementById('leaderboard-body');
+  tbody.innerHTML = '';
+  playerMap = {};
+
       if (!data.records.length) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No players yet.</td></tr>';
         return;
