@@ -116,27 +116,45 @@
 
     // === LOAD PLAYERS ===
     async function loadPlayers() {
-      const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`, { headers: authHeader });
-      const data = await res.json();
-      const tbody = document.getElementById('leaderboard-body');
-      tbody.innerHTML = '';
-      playerMap = {};
-      data.records.forEach(r => playerMap[r.id] = r.fields.name);
-      data.records.forEach(r => {
-        const f = r.fields;
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${f.name}</td><td>${f.wins||0}</td><td>${f.losses||0}</td><td>${f.points||0}</td>`;
-        tbody.appendChild(tr);
-      });
+  const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${PLAYERS_TABLE}`;
+  const res = await fetch(url, { headers: authHeader });
 
-      const list = document.getElementById('playerCheckList');
-      list.innerHTML = '<strong>Select players:</strong><br>';
-      data.records.forEach(r=>{
-        const label=document.createElement('label');
-        label.innerHTML=`<input type="checkbox" class="playerCheck" value="${r.id}"> ${r.fields.name}<br>`;
-        list.appendChild(label);
-      });
-    }
+  if (!res.ok) {
+    console.error("❌ Airtable fetch failed", res.status, await res.text());
+    document.getElementById('leaderboard-body').innerHTML =
+      `<tr><td colspan="4" style="text-align:center;color:red;">Airtable fetch failed (${res.status})</td></tr>`;
+    return;
+  }
+
+  const data = await res.json();
+  if (!data.records || data.records.length === 0) {
+    document.getElementById('leaderboard-body').innerHTML =
+      `<tr><td colspan="4" style="text-align:center;">No players found</td></tr>`;
+    return;
+  }
+
+  const tbody = document.getElementById('leaderboard-body');
+  tbody.innerHTML = '';
+  playerMap = {};
+
+  data.records.forEach(r => {
+    playerMap[r.id] = r.fields.name;
+    const f = r.fields;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${f.name}</td><td>${f.wins||0}</td><td>${f.losses||0}</td><td>${f.points||0}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const list = document.getElementById('playerCheckList');
+  list.innerHTML = '<strong>Select players:</strong><br>';
+  data.records.forEach(r=>{
+    const f=r.fields;
+    const label=document.createElement('label');
+    label.innerHTML=`<input type="checkbox" class="playerCheck" value="${r.id}"> ${f.name}<br>`;
+    list.appendChild(label);
+  });
+}
+
 
     // === PLAN NIGHT ===
     async function planNight() {
