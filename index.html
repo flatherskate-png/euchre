@@ -306,34 +306,36 @@ async function endGameNight() {
 
   console.log("DEBUG: Updated night status → complete", nightRes.status);
 
- // 2️⃣ Cancel any remaining pending matches for this night (safe local filter)
-console.log("DEBUG: Looking for pending matches linked to", currentNight);
+  // 2️⃣ Cancel any remaining pending matches for this night (safe local filter)
+  console.log("DEBUG: Looking for pending matches linked to", currentNight);
 
-const allMatchesRes = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`, { headers: authHeader });
-const allMatchesData = await allMatchesRes.json();
+  const allMatchesRes = await fetch(
+    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}`,
+    { headers: authHeader }
+  );
+  const allMatchesData = await allMatchesRes.json();
 
-const pendingMatches = (allMatchesData.records || []).filter(rec => {
-  const f = rec.fields || {};
-  return f.status === "pending" && Array.isArray(f.nights) && f.nights.includes(currentNight);
-});
-
-console.log(`DEBUG: Found ${pendingMatches.length} pending matches to cancel`, pendingMatches);
-
-for (const rec of pendingMatches) {
-  const cancelUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${rec.id}`;
-  const cancelBody = { fields: { status: "cancelled" } };
-
-  const cancelRes = await fetch(cancelUrl, {
-    method: "PATCH",
-    headers: { ...authHeader, "Content-Type": "application/json" },
-    body: JSON.stringify(cancelBody)
+  const pendingMatches = (allMatchesData.records || []).filter(rec => {
+    const f = rec.fields || {};
+    return f.status === "pending" && Array.isArray(f.nights) && f.nights.includes(currentNight);
   });
 
-  console.log("DEBUG: Cancelled match", rec.id, cancelRes.status);
-}
-}
+  console.log(`DEBUG: Found ${pendingMatches.length} pending matches to cancel`, pendingMatches);
 
+  for (const rec of pendingMatches) {
+    const cancelUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${rec.id}`;
+    const cancelBody = { fields: { status: "cancelled" } };
 
+    const cancelRes = await fetch(cancelUrl, {
+      method: "PATCH",
+      headers: { ...authHeader, "Content-Type": "application/json" },
+      body: JSON.stringify(cancelBody)
+    });
+
+    console.log("DEBUG: Cancelled match", rec.id, cancelRes.status);
+  }
+
+  // 3️⃣ Refresh and reset
   await recalcFromMatches();
   await loadMatches();
 
@@ -342,7 +344,8 @@ for (const rec of pendingMatches) {
   currentNight = null;
 
   alert("Game night closed. Pending matches marked as cancelled.");
-}
+} // ✅ closes endGameNight()
+
 
 
     // ===== RECALC IGNORING CANCELLED =====
