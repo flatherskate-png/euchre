@@ -331,30 +331,49 @@ async function loadMatches() {
 }
 
 
-// === RECORD RESULT ===
+// ===== RECORD MATCH RESULT =====
 async function recordResult(matchId, winner) {
+  // Always show the End Night button if we’re recording results
+  document.getElementById('endNightBtn').classList.remove('hidden');
+
   try {
-    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${matchId}`;
-    const res = await fetch(url, {
+    console.log(`Recording result for match ${matchId}: winner = ${winner}`);
+
+    // ✅ 1. Update the match result
+    const matchUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE}/${MATCHES_TABLE}/${matchId}`;
+    const res = await fetch(matchUrl, {
       method: 'PATCH',
       headers: { ...authHeader, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { winner, status: 'complete' } })
+      body: JSON.stringify({
+        fields: { winner, status: 'complete' }
+      })
     });
 
     const text = await res.text();
-    console.log(`✅ Updated ${matchId} with winner ${winner}`, res.status, text);
+    console.log('Match update response:', res.status, text);
 
-    // 🔧 Important fix: recalcFromMatches must be defined *above this block*
-    if (typeof recalcFromMatches === 'function') {
-      await recalcFromMatches();
-    } else {
-      console.warn('⚠️ recalcFromMatches not found — skipping recalculation');
+    if (!res.ok) {
+      throw new Error(`Failed to update match: ${res.status}`);
     }
 
+    // ✅ 2. Recalculate standings and refresh matches
+    await recalcFromMatches();
     await loadMatches();
+
+    // ✅ 3. Keep the button and message visible
+    if (currentNight) {
+      document.getElementById('endNightBtn').classList.remove('hidden');
+      document.getElementById('nightStatusMsg').innerText = 'Night in progress...';
+    }
   } catch (err) {
-    console.error('❌ Error recording result', err);
-    alert('Failed to update match result.');
+    console.error('❌ Error recording result:', err);
+    alert('Failed to record match result.');
+  }
+
+  // Reassert UI again as a fail-safe
+  if (currentNight) {
+    document.getElementById('endNightBtn').classList.remove('hidden');
+    document.getElementById('nightStatusMsg').innerText = 'Night in progress...';
   }
 }
 
@@ -377,6 +396,12 @@ async function init() {
     document.getElementById('endNightBtn').classList.remove('hidden');
     document.getElementById('nightStatusMsg').innerText = 'Night in progress...';
   }
+  // Keep the End Night button visible after recalculating standings
+if (currentNight) {
+  document.getElementById('endNightBtn').classList.remove('hidden');
+  document.getElementById('nightStatusMsg').innerText = 'Night in progress...';
+}
+
 }
 
 init();
