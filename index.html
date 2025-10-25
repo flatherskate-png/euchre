@@ -301,6 +301,7 @@ async function loadMatches() {
   const data = await res.json();
 
   const tbody = document.getElementById('matchesBody');
+  if (!tbody) return; // safety guard if the table isn't rendered yet
   tbody.innerHTML = '';
 
   if (!data.records?.length) {
@@ -329,6 +330,7 @@ async function loadMatches() {
   }
 }
 
+
 // === RECORD RESULT ===
 async function recordResult(matchId, winner) {
   try {
@@ -342,7 +344,13 @@ async function recordResult(matchId, winner) {
     const text = await res.text();
     console.log(`✅ Updated ${matchId} with winner ${winner}`, res.status, text);
 
-    await recalcFromMatches();
+    // 🔧 Important fix: recalcFromMatches must be defined *above this block*
+    if (typeof recalcFromMatches === 'function') {
+      await recalcFromMatches();
+    } else {
+      console.warn('⚠️ recalcFromMatches not found — skipping recalculation');
+    }
+
     await loadMatches();
   } catch (err) {
     console.error('❌ Error recording result', err);
@@ -350,11 +358,28 @@ async function recordResult(matchId, winner) {
   }
 }
 
-// Automatically load matches when the admin page starts
-  loadPlayers();
-  loadMatches();
 
-  
+// === INITIALIZATION ===
+async function init() {
+  await loadPlayers();
+  if (typeof recalcFromMatches === 'function') await recalcFromMatches();
+  await loadMatches();
+
+  // check if a night is active
+  const res = await fetch(
+    `https://api.airtable.com/v0/${AIRTABLE_BASE}/${NIGHTS_TABLE}?filterByFormula=${encodeURIComponent("{status}='in progress'")}`,
+    { headers: authHeader }
+  );
+  const data = await res.json();
+
+  if (data.records.length) {
+    currentNight = data.records[0].id;
+    document.getElementById('endNightBtn').classList.remove('hidden');
+    document.getElementById('nightStatusMsg').innerText = 'Night in progress...';
+  }
+}
+
+init();
   </script>
 </body>
 </html>
